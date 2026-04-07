@@ -19,6 +19,8 @@ model Driver {
   vehicleDetails  Json
   currentLocation Unsupported("geometry(Point, 4326)")
   rating          Float
+  isVerified      Boolean  @default(false)
+  isOnline        Boolean  @default(false)
   trips           Trip[]   @relation("DriverTrips")
 }
 
