@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:rideapp_client/core/config/app_config.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -8,7 +9,7 @@ class AuthService {
   AuthService._internal();
 
   final _storage = const FlutterSecureStorage();
-  final String _baseUrl = 'http://localhost:3000/api/auth';
+  final String _baseUrl = '${AppConfig.apiUrl}/api/auth';
 
   String? _token;
   Map<String, dynamic>? _currentUser;

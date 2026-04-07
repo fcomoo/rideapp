@@ -1,7 +1,9 @@
+import 'package:rideapp_client/core/config/app_config.dart';
+
 class AntigravityProfile {
   // URLs de infraestructura
-  static const String baseUrl = "http://localhost:3000";
-  static const String wsUrl = "ws://localhost:3000/ws";
+  static const String baseUrl = AppConfig.apiUrl;
+  static const String wsUrl = "${AppConfig.wsUrl}/ws";
 
   // Intervalos y timeouts
   static const Duration gpsInterval = Duration(seconds: 5);

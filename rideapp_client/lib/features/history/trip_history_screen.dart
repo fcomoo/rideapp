@@ -3,6 +3,8 @@ import 'package:rideapp_client/features/rating/rating_widget.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import 'package:rideapp_client/core/config/app_config.dart';
+
 class TripHistoryScreen extends StatefulWidget {
   final String userId;
   const TripHistoryScreen({super.key, required this.userId});
@@ -35,7 +37,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> with SingleTicker
     try {
       // Intentar fetch real
       final response = await http.get(
-        Uri.parse('http://localhost:3000/api/trips/history/${widget.userId}')
+        Uri.parse('${AppConfig.apiUrl}/api/trips/history/${widget.userId}')
       ).timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {

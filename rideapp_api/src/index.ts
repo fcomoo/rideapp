@@ -328,6 +328,12 @@ const start = async () => {
     }));
   });
 
+  server.get('/health', async () => ({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    service: 'RideApp API - Macuspana'
+  }));
+
   const port = Number(process.env.PORT) || 3000;
   await server.listen({ port, host: '0.0.0.0' });
   console.log(`[RideApp API] Running on port ${port}`);
