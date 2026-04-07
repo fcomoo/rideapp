@@ -31,9 +31,9 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
   
   // Mock Passengers (Macuspana area)
   final List<Coordinates> _mockPassengers = [
-    Coordinates(17.7650, -92.5290),
-    Coordinates(17.7600, -92.5350),
-    Coordinates(17.7680, -92.5280),
+    Coordinates(17.7628, -92.5900),
+    Coordinates(17.7580, -92.5850),
+    Coordinates(17.7650, -92.6000),
   ];
 
   @override
@@ -52,7 +52,7 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
       GravityStore().updateDriver(Driver(
         id: widget.driverId,
         vehicleDetails: {'model': 'Tesla Model 3', 'plate': 'AG-2026'},
-        currentLocation: Coordinates(17.7628, -92.5317),
+        currentLocation: Coordinates(17.7600, -92.5950),
         rating: 4.9,
       ));
     }
@@ -284,8 +284,8 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
-        initialCenter: LatLng(driver.currentLocation.latitude, driver.currentLocation.longitude),
-        initialZoom: 14,
+        initialCenter: const LatLng(17.7600, -92.5950),
+        initialZoom: 14.0,
         backgroundColor: const Color(0xFF121212),
       ),
       children: [
