@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong2.dart' as ll;
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/subscriptions/trip_subscription.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
@@ -17,15 +18,9 @@ class MapTrackerWidget extends StatefulWidget {
 
 class _MapTrackerWidgetState extends State<MapTrackerWidget> {
   late PassengerSubscription _subscription;
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
   
-  // Tracking para el throttle manual de 1000ms
   DateTime? _lastEmitTime;
-  
-  // Marcadores reactivos (Google Maps LatLng)
-  final Set<Marker> _markers = {};
-  
-  // Estado inicial offline-first desde el GravityStore
   Trip? _initialState;
 
   @override
@@ -34,11 +29,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
     _subscription = PassengerSubscription(widget.tripId);
     _subscription.subscribe();
     
-    // Recuperar estado inicial inmediatamente para renderizado instantáneo
     _initialState = GravityStore().currentTrips[widget.tripId];
-    if (_initialState != null && _initialState!.route.isNotEmpty) {
-      _updateDriverMarker(_initialState!.route.last);
-    }
   }
 
   @override
@@ -47,44 +38,21 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
     super.dispose();
   }
 
-  /// Convierte el Value Object de dominio a la clase de la UI (Google Maps)
-  LatLng _toLatLng(Coordinates coords) {
-    return LatLng(coords.latitude, coords.longitude);
+  /// Conversión UI-only a LatLng de latlong2
+  ll.LatLng _toLatLng(Coordinates coords) {
+    return ll.LatLng(coords.latitude, coords.longitude);
   }
 
-  /// Procesa el flujo de datos aplicando el throttle manual
   Stream<Trip?> _getThrottledStream() {
     return _subscription.tripStream.where((trip) {
       if (trip == null) return false;
-      
       final now = DateTime.now();
-      if (_lastEmitTime == null || 
-          now.difference(_lastEmitTime!) >= const Duration(milliseconds: 1000)) {
+      if (_lastEmitTime == null || now.difference(_lastEmitTime!) >= const Duration(milliseconds: 1000)) {
         _lastEmitTime = now;
         return true;
       }
       return false;
     });
-  }
-
-  void _updateDriverMarker(Coordinates position) {
-    final latLng = _toLatLng(position);
-    
-    setState(() {
-      _markers.add(
-        Marker(
-          markerId: const MarkerId('driver_marker'),
-          position: latLng,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          infoWindow: const InfoWindow(title: 'Tu Conductor'),
-        ),
-      );
-    });
-
-    // Animar cámara suavemente si el controlador está listo
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLng(latLng),
-    );
   }
 
   @override
@@ -94,24 +62,57 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
       initialData: _initialState,
       builder: (context, snapshot) {
         final trip = snapshot.data;
-        
-        if (trip != null && trip.route.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _updateDriverMarker(trip.route.last);
-          });
+        final List<ll.LatLng> polyPoints = trip?.route.map(_toLatLng).toList() ?? [];
+        final lastPoint = polyPoints.isNotEmpty ? polyPoints.last : ll.LatLng(0, 0);
+
+        // Actualizar centro del mapa automáticamente en cada actualización throttled
+        if (trip != null && polyPoints.isNotEmpty) {
+           WidgetsBinding.instance.addPostFrameCallback((_) {
+             _mapController.move(lastPoint, 15);
+           });
         }
 
-        return GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: trip != null && trip.route.isNotEmpty 
-                ? _toLatLng(trip.route.last) 
-                : const LatLng(0, 0),
-            zoom: 15,
+        return FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: lastPoint,
+            initialZoom: 15,
           ),
-          markers: _markers,
-          onMapCreated: (controller) => _mapController = controller,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
+          children: [
+            TileLayer(
+              urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+              subdomains: const ['a', 'b', 'c', 'd'],
+              userAgentPackageName: 'com.rideapp.client',
+            ),
+            if (polyPoints.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: polyPoints,
+                    strokeWidth: 4,
+                    color: const Color(0xFFFF6B00),
+                  ),
+                ],
+              ),
+            MarkerLayer(
+              markers: [
+                if (polyPoints.isNotEmpty)
+                  Marker(
+                    point: lastPoint,
+                    width: 40,
+                    height: 40,
+                    child: const Icon(Icons.drive_eta, color: Color(0xFFFF6B00), size: 30),
+                  ),
+                if (polyPoints.isNotEmpty)
+                   Marker(
+                     point: polyPoints.first,
+                     width: 40,
+                     height: 40,
+                     child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 30),
+                   ),
+              ],
+            ),
+          ],
         );
       },
     );

@@ -4,15 +4,80 @@ import 'package:rideapp_client/core/antigravity/client.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/antigravity/profile.dart';
 import 'package:rideapp_client/core/protocols/trip_protocol.dart';
+import 'package:rideapp_client/core/services/geocoding_service.dart';
+import 'package:rideapp_client/core/services/routing_service.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 
-class HomePassenger extends StatelessWidget {
+class HomePassenger extends StatefulWidget {
   final String currentUserId;
 
   const HomePassenger({super.key, required this.currentUserId});
+
+  @override
+  State<HomePassenger> createState() => _HomePassengerState();
+}
+
+class _HomePassengerState extends State<HomePassenger> {
+  final TextEditingController _destinationController = TextEditingController();
+  final StreamController<String> _searchDebounce = StreamController<String>();
+  List<SearchResult> _suggestions = [];
+  bool _isSearching = false;
+  
+  SearchResult? _selectedDestination;
+  List<Coordinates> _previewRoute = [];
+  bool _isCalculatingRoute = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupSearchDebounce();
+  }
+
+  void _setupSearchDebounce() {
+    _searchDebounce.stream
+        .distinct()
+        .where((query) => query.length > 2)
+        .listen((query) async {
+      final results = await GeocodingService.search(query);
+      if (mounted) {
+        setState(() {
+          _suggestions = results;
+          _isSearching = results.isNotEmpty;
+        });
+      }
+    });
+  }
+
+  Future<void> _selectDestination(SearchResult result) async {
+    setState(() {
+      _selectedDestination = result;
+      _destinationController.text = result.name;
+      _isSearching = false;
+      _isCalculatingRoute = true;
+    });
+
+    // Mock Origin (en una app real vendría del GPS)
+    const origin = Coordinates(19.4326, -99.1332); 
+    
+    final route = await RoutingService.getRoute(origin, result.coordinates);
+    
+    if (mounted) {
+      setState(() {
+        _previewRoute = route;
+        _isCalculatingRoute = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce.close();
+    _destinationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,26 +88,29 @@ class HomePassenger extends StatelessWidget {
         builder: (context, snapshot) {
           final trips = snapshot.data ?? GravityStore().currentTrips;
           
-          // Buscar viaje activo para este pasajero
           final activeTrip = trips.values.where((t) => 
-            t.clientId == currentUserId && 
+            t.clientId == widget.currentUserId && 
             t.status != TripStatus.completed &&
             t.status != TripStatus.cancelled
           ).firstOrNull;
 
           return Stack(
             children: [
-              // Fondo: Mapa o Placeholder
               _buildMainContent(activeTrip),
 
-              // Panel Inferior con Transiciones
+              // Buscador de Destino (Solo en IDLE)
+              if (activeTrip == null) 
+                Positioned(
+                  top: 60,
+                  left: 20,
+                  right: 20,
+                  child: _buildSearchContainer(),
+                ),
+
               Align(
                 alignment: Alignment.bottomCenter,
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
                   child: _buildBottomPanel(context, activeTrip),
                 ),
               ),
@@ -54,16 +122,69 @@ class HomePassenger extends StatelessWidget {
   }
 
   Widget _buildMainContent(Trip? activeTrip) {
-    if (activeTrip != null && activeTrip.status == TripStatus.inProgress) {
+    if (activeTrip != null) {
       return MapTrackerWidget(tripId: activeTrip.id);
     }
     
-    // Vista por defecto (Mapa idle o imagen)
+    // Si tenemos una ruta previsualizada, mostramos un mapa con esa ruta
+    // (En esta implementación simplificada, MapTrackerWidget requiere un tripId)
+    // Mostramos un placeholder estilizado
     return Container(
       color: const Color(0xFF1C1C1C),
-      child: const Center(
-        child: Icon(Icons.map_outlined, color: Colors.white24, size: 80),
+      child: Center(
+        child: _isCalculatingRoute 
+          ? const CircularProgressIndicator(color: Color(0xFFFF6B00))
+          : const Icon(Icons.map_outlined, color: Colors.white24, size: 80),
       ),
+    );
+  }
+
+  Widget _buildSearchContainer() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1C),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10)],
+            border: Border.all(color: Colors.white10),
+          ),
+          child: TextField(
+            controller: _destinationController,
+            style: const TextStyle(color: Colors.white),
+            onChanged: (val) => _searchDebounce.add(val),
+            decoration: const InputDecoration(
+              hintText: '¿A dónde vas?',
+              hintStyle: TextStyle(color: Colors.white24),
+              border: InputBorder.none,
+              icon: Icon(Icons.search, color: Color(0xFFFF6B00)),
+            ),
+          ),
+        ),
+        if (_isSearching)
+          Container(
+            margin: const EdgeInsets.top(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1C),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: _suggestions.length,
+              separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+              itemBuilder: (context, index) {
+                final result = _suggestions[index];
+                return ListTile(
+                  title: Text(result.name, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                  onTap: () => _selectDestination(result),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -82,7 +203,6 @@ class HomePassenger extends StatelessWidget {
     }
   }
 
-  // 1. Estado IDLE: Solicitar Viaje
   Widget _buildIdleView(BuildContext context) {
     return Container(
       key: const ValueKey('idle'),
@@ -91,56 +211,49 @@ class HomePassenger extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSearchInput('¿A dónde vamos?'),
-          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.history, color: Colors.white24),
+              const SizedBox(width: 12),
+              const Text('Casa', style: TextStyle(color: Colors.white70)),
+              const Spacer(),
+              _buildRoundIcon(Icons.work_outline),
+              const SizedBox(width: 8),
+              _buildRoundIcon(Icons.add),
+            ],
+          ),
+          const SizedBox(height: 24),
           _buildActionButton(
-            label: 'SOLICITAR RIDE',
-            onPressed: () => _handleRequestTrip(context),
+            label: _selectedDestination != null ? 'SOLICITAR RIDE A ${_selectedDestination!.name.toUpperCase()}' : 'SOLICITAR RIDE',
+            onPressed: _selectedDestination != null ? () => _handleRequestTrip(context) : null,
           ),
         ],
       ),
     );
   }
 
-  // 2. Estado SEARCHING: KilSwitch Countdown
   Widget _buildSearchingView(BuildContext context, Trip trip) {
     return Container(
-      key: const ValueKey('searching'),
       padding: const EdgeInsets.all(24),
       decoration: _panelDecoration(),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(color: Color(0xFFFF6B00)),
-          const SizedBox(height: 16),
-          const Text(
-            'Buscando conductor cercano...',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
+          const LinearProgressIndicator(color: Color(0xFFFF6B00), backgroundColor: Colors.white10),
+          const SizedBox(height: 24),
+          const Text('BUSCANDO CONDUCTOR...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
           const SizedBox(height: 8),
-          TweenAnimationBuilder<Duration>(
-            duration: AntigravityProfile.searchTimeout,
-            tween: Tween(begin: AntigravityProfile.searchTimeout, end: Duration.zero),
-            builder: (context, value, child) {
-              final seconds = value.inSeconds;
-              return Text(
-                'Tiempo restante: ${seconds}s',
-                style: const TextStyle(color: Colors.white70),
-              );
-            },
-          ),
+          const Text('Esto tomará menos de 1 minuto', style: TextStyle(color: Colors.white30, fontSize: 12)),
+          const SizedBox(height: 24),
+          _buildActionButton(label: 'CANCELAR', color: Colors.white10, onPressed: () => _handleCancelTrip(trip)),
         ],
       ),
     );
   }
 
-  // 3. Estado ACCEPTED: Info del Conductor
   Widget _buildAcceptedView(BuildContext context, Trip trip) {
-    // En una app real, buscaríamos el objeto Driver en el GravityStore usando trip.driverId
     final driver = GravityStore().currentDrivers[trip.driverId];
-
     return Container(
-      key: const ValueKey('accepted'),
       padding: const EdgeInsets.all(24),
       decoration: _panelDecoration(),
       child: Column(
@@ -148,46 +261,31 @@ class HomePassenger extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(backgroundColor: Color(0xFFFF6B00), child: Icon(Icons.person)),
+              const CircleAvatar(backgroundColor: Color(0xFFFF6B00), child: Icon(Icons.person, color: Colors.white)),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      driver?.vehicleDetails['driver_name'] ?? 'Conductor asignado',
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      driver?.vehicleDetails['license_plate'] ?? 'Placa pendiente',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
+                    Text(driver?.vehicleDetails['driver_name'] ?? 'Tu Conductor', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(driver?.vehicleDetails['model'] ?? 'Confirmando vehículo...', style: const TextStyle(color: Colors.white30, fontSize: 12)),
                   ],
                 ),
               ),
-              Column(
-                children: [
-                  const Icon(Icons.star, color: Colors.amber, size: 20),
-                  Text(driver?.rating.toString() ?? '5.0', style: const TextStyle(color: Colors.white)),
-                ],
-              ),
+              const Icon(Icons.star, color: Colors.amber, size: 16),
+              const SizedBox(width: 4),
+              Text(driver?.rating.toString() ?? '4.9', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildActionButton(
-            label: 'CANCELAR VIAJE',
-            color: Colors.redAccent,
-            onPressed: () => _handleCancelTrip(trip),
-          ),
+          const SizedBox(height: 24),
+          _buildActionButton(label: 'CANCELAR VIAJE', color: Colors.red.withOpacity(0.1), onPressed: () => _handleCancelTrip(trip)),
         ],
       ),
     );
   }
 
-  // 4. Estado IN_PROGRESS: Mapa Full + SOS
   Widget _buildInProgressView(BuildContext context, Trip trip) {
-    return Container(
-      key: const ValueKey('in_progress'),
+     return Container(
       padding: const EdgeInsets.all(24),
       decoration: _panelDecoration(),
       child: Row(
@@ -197,74 +295,74 @@ class HomePassenger extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('VIAJE EN CURSO', style: TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold)),
-                Text('Llegada en 5-8 min', style: TextStyle(color: Colors.white70)),
+                Text('EN TRAYECTO', style: TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold)),
+                Text('Llegada estimada: 12:45', style: TextStyle(color: Colors.white30, fontSize: 12)),
               ],
             ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            onPressed: () => _handleSOS(trip),
-            child: const Text('SOS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          ),
+          _buildSOSButton(trip),
         ],
       ),
     );
   }
 
-  // Helpers de UI
+  // --- UI Helpers ---
   BoxDecoration _panelDecoration() {
     return const BoxDecoration(
       color: Color(0xFF1C1C1C),
-      borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, -2))],
+      borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+      boxShadow: [BoxShadow(color: Colors.black87, blurRadius: 20)],
     );
   }
 
-  Widget _buildSearchInput(String hint) {
+  Widget _buildRoundIcon(IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(color: const Color(0xFF2C2C2C), borderRadius: BorderRadius.circular(12)),
-      child: TextField(
-        style: const TextStyle(color: Colors.white),
-        decoration: InputDecoration(hintText: hint, hintStyle: const TextStyle(color: Colors.white24), border: InputBorder.none),
-      ),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
+      child: Icon(icon, color: Colors.white54, size: 20),
     );
   }
 
-  Widget _buildActionButton({required String label, required VoidCallback onPressed, Color? color}) {
+  Widget _buildSOSButton(Trip trip) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+      onPressed: () => _handleSOS(trip),
+      child: const Text('SOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  Widget _buildActionButton({required String label, required VoidCallback? onPressed, Color? color}) {
     return SizedBox(
       width: double.infinity,
-      height: 54,
+      height: 56,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: color ?? const Color(0xFFFF6B00),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          disabledBackgroundColor: Colors.white.withOpacity(0.05),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 0,
         ),
         onPressed: onPressed,
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.white)),
       ),
     );
   }
 
-  // Manejo de Lógica de Protocolos
+  // --- Lógica ---
   void _handleRequestTrip(BuildContext context) {
-    // Demo data for request
+    if (_selectedDestination == null) return;
+
     final newTrip = Trip(
       id: 'trip-${DateTime.now().millisecondsSinceEpoch}',
-      clientId: currentUserId,
+      clientId: widget.currentUserId,
       status: TripStatus.requested,
-      route: [const Coordinates(-16.5, -68.1)], // Dummy origin
+      route: _previewRoute,
     );
 
     TripRequestProtocol.requestTrip(
       trip: newTrip,
-      origin: const Coordinates(-16.5, -68.1),
-      destination: const Coordinates(-16.51, -68.12),
+      origin: _previewRoute.first,
+      destination: _previewRoute.last,
       offeredPrice: 25.0,
       onError: (msg) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
@@ -277,17 +375,14 @@ class HomePassenger extends StatelessWidget {
       currentTrip: trip,
       nextTrip: trip.copyWith(status: TripStatus.cancelled),
       onCommit: (t) => Antigravity.emit('trip.cancelled', {'tripId': t.id}),
-      onRollback: (_) => print('Cancelación fallida localmente'),
+      onRollback: (_) => print('Rollback manual'),
     );
   }
 
   void _handleSOS(Trip trip) {
-    // Mutación irreversible sin rollback
     Antigravity.emit('security.sos', {
       'tripId': trip.id,
-      'userId': currentUserId,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'userId': widget.currentUserId,
     });
-    print('EMERGENCIA SOS ACTIVADA para viaje ${trip.id}');
   }
 }
