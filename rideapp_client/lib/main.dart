@@ -1,19 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:rideapp_client/core/services/auth_service.dart';
+import 'package:rideapp_client/core/services/notification_service.dart';
+import 'package:rideapp_client/features/auth/login_screen.dart';
 import 'package:rideapp_client/features/passenger/home_passenger.dart';
 import 'package:rideapp_client/features/driver/home_driver.dart';
-import 'package:rideapp_client/core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService().init();
-  runApp(const RideApp());
+  
+  final authService = AuthService();
+  await authService.init();
+
+  runApp(RideApp(authService: authService));
 }
 
 class RideApp extends StatelessWidget {
-  const RideApp({super.key});
+  final AuthService authService;
+  const RideApp({super.key, required this.authService});
 
   @override
   Widget build(BuildContext context) {
+    Widget home;
+    if (authService.isLoggedIn() && authService.currentUser != null) {
+      final user = authService.currentUser!;
+      if (user['role'] == 'driver') {
+        home = HomeDriver(driverId: user['id']);
+      } else {
+        home = HomePassenger(currentUserId: user['id']);
+      }
+    } else {
+      home = const LoginScreen();
+    }
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -21,7 +40,7 @@ class RideApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF121212),
         primaryColor: const Color(0xFFFF6B00),
       ),
-      home: const RoleSelectionScreen(),
+      home: home,
     );
   }
 }

@@ -8,10 +8,14 @@ datasource db {
 }
 
 model User {
-  id     String @id @default(uuid())
-  role   String // client, driver
-  status String // idle, searching, on_trip
-  trips  Trip[] @relation("ClientTrips")
+  id       String @id @default(uuid())
+  name     String
+  email    String @unique
+  password String
+  phone    String? 
+  role     String // client, driver
+  status   String // idle, searching, on_trip
+  trips    Trip[] @relation("ClientTrips")
 }
 
 model Driver {

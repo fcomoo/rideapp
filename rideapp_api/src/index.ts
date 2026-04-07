@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import { redisPub, redisSub } from './redis/pub-sub';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 const prisma = new PrismaClient();
@@ -58,6 +60,76 @@ const start = async () => {
     connection.socket.on('error', (err: Error) => {
       console.error('[WS] Socket error:', err);
     });
+  });
+
+  const JWT_SECRET = process.env.JWT_SECRET || 'macuspana-premium-secret-2024';
+
+  // --- Auth Support ---
+  const verifyToken = async (request: any, reply: any) => {
+    try {
+      const auth = request.headers.authorization;
+      if (!auth) throw new Error('No token');
+      const token = auth.split(' ')[1];
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      request.user = decoded;
+    } catch (err) {
+      reply.code(401).send({ error: 'Unauthorized' });
+    }
+  };
+
+  // --- Auth Routes ---
+  server.post('/api/auth/register', async (request, reply) => {
+    const { name, email, password, role, phone } = request.body as any;
+    
+    // Validación de teléfono obligatoria para conductores
+    if (role === 'driver' && !phone) {
+      return reply.code(400).send({ error: 'Phone is required for drivers' });
+    }
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await (prisma as any).user.create({
+        data: { name, email, password: hashedPassword, role, phone, status: 'idle' }
+      });
+
+      // Si es conductor, crear su perfil de Driver vacío
+      if (role === 'driver') {
+        await (prisma as any).driver.create({
+          data: { 
+            id: user.id, 
+            vehicleDetails: { model: 'N/A', plate: 'N/A' },
+            currentLocation: null, // PostgreSQL GIS handle required later
+            rating: 5.0,
+            isVerified: false,
+            isOnline: false
+          }
+        });
+      }
+
+      const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+      return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+    } catch (err) {
+      console.error(err);
+      reply.code(400).send({ error: 'User already exists or invalid data' });
+    }
+  });
+
+  server.post('/api/auth/login', async (request, reply) => {
+    const { email, password } = request.body as any;
+    const user = await (prisma as any).user.findUnique({ where: { email } });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return reply.code(401).send({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  });
+
+  server.get('/api/auth/me', { preHandler: [verifyToken] }, async (request) => {
+    const decoded = (request as any).user;
+    const user = await (prisma as any).user.findUnique({ where: { id: decoded.id } });
+    return { user };
   });
 
   // --- API Routes ---
