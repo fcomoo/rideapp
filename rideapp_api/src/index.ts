@@ -150,6 +150,24 @@ const start = async () => {
     return { success: true };
   });
 
+  // --- Chat (Mensajería Efímera) ---
+  server.post('/api/chat/:tripId', async (request) => {
+    const { tripId } = request.params as { tripId: string };
+    const { id, senderId, senderRole, text } = request.body as any;
+    const timestamp = Date.now();
+
+    const message = { id, tripId, senderId, senderRole, text, timestamp };
+
+    // Publicar en el canal del chat del viaje
+    await redisPub.publish(`chat.${tripId}`, JSON.stringify({
+      event: 'chat.message',
+      channel: `chat.${tripId}`,
+      payload: message
+    }));
+
+    return { success: true, message };
+  });
+
   const port = Number(process.env.PORT) || 3000;
   await server.listen({ port, host: '0.0.0.0' });
   console.log(`[RideApp API] Running on port ${port}`);

@@ -25,7 +25,14 @@ class GeocodingService {
 
     _lastCallTime = DateTime.now();
 
-    final url = Uri.parse('$_nominatimUrl?q=$query&format=json&limit=5');
+    final url = Uri.parse(
+      '$_nominatimUrl?q=$query'
+      '&format=json'
+      '&limit=5'
+      '&countrycodes=mx'
+      '&viewbox=-92.65,17.72,-92.52,17.80'
+      '&bounded=1'
+    );
     
     try {
       final response = await http.get(url, headers: {

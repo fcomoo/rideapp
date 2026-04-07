@@ -16,6 +16,7 @@ import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/core/utils/mock_traffic.dart';
+import 'package:rideapp_client/features/chat/chat_screen.dart';
 
 class HomePassenger extends StatefulWidget {
   final String currentUserId;
@@ -29,6 +30,8 @@ class HomePassenger extends StatefulWidget {
 class _HomePassengerState extends State<HomePassenger> {
   final TextEditingController _destinationController = TextEditingController();
   final StreamController<String> _searchDebounce = StreamController<String>();
+  final MapController _mapController = MapController();
+  Timer? _debounceTimer;
   List<SearchResult> _suggestions = [];
   bool _isSearching = false;
   
@@ -115,17 +118,19 @@ class _HomePassengerState extends State<HomePassenger> {
   }
 
   void _setupSearchDebounce() {
-    _searchDebounce.stream
-        .distinct()
-        .where((query) => query.length > 2)
-        .listen((query) async {
-      final results = await GeocodingService.search(query);
-      if (mounted) {
-        setState(() {
-          _suggestions = results;
-          _isSearching = results.isNotEmpty;
-        });
-      }
+    _searchDebounce.stream.listen((query) {
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
+        if (query.length > 2) {
+          final results = await GeocodingService.search(query);
+          if (mounted) {
+            setState(() {
+              _suggestions = results;
+              _isSearching = results.isNotEmpty;
+            });
+          }
+        }
+      });
     });
   }
 
@@ -136,6 +141,8 @@ class _HomePassengerState extends State<HomePassenger> {
       _isSearching = false;
       _isCalculatingRoute = true;
     });
+
+    _mapController.move(LatLng(result.coordinates.latitude, result.coordinates.longitude), 15);
 
     // Mock Origin (en una app real vendría del GPS)
     const origin = SimpleLatLng(17.7628, -92.5317); 
@@ -155,6 +162,8 @@ class _HomePassengerState extends State<HomePassenger> {
     _searchDebounce.close();
     _destinationController.dispose();
     _mockTrafficTimer?.cancel();
+    _debounceTimer?.cancel();
+    _mapController.dispose();
     MockTraffic.stop();
     super.dispose();
   }
@@ -193,10 +202,65 @@ class _HomePassengerState extends State<HomePassenger> {
                   child: _buildBottomPanel(context, activeTrip),
                 ),
               ),
+
+              if (activeTrip != null)
+                Positioned(
+                  right: 20,
+                  bottom: 220, // Por encima del panel inferior
+                  child: _buildChatButton(activeTrip),
+                ),
             ],
           );
         },
       ),
+    );
+  }
+
+  Widget _buildChatButton(Trip activeTrip) {
+    final driver = GravityStore().currentDrivers[activeTrip.driverId];
+    final driverName = driver?.vehicleDetails['driver_name'] ?? 'Conductor';
+
+    return StreamBuilder<Map<String, int>>(
+      stream: GravityStore().unreadStream,
+      builder: (context, snapshot) {
+        final unreadCount = (snapshot.data ?? GravityStore().unreadCounts)[activeTrip.id] ?? 0;
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            FloatingActionButton(
+              backgroundColor: const Color(0xFF1C1C1C),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    trip: activeTrip,
+                    currentUserId: widget.currentUserId,
+                    otherUserName: driverName,
+                    senderRole: 'passenger',
+                  ),
+                ),
+              ),
+              child: const Icon(Icons.chat_bubble_outline, color: Color(0xFFFF6B00)),
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: -4,
+                top: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  child: Text(
+                    '$unreadCount',
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -206,6 +270,7 @@ class _HomePassengerState extends State<HomePassenger> {
     }
     
     return FlutterMap(
+      mapController: _mapController,
       options: MapOptions(
         initialCenter: const LatLng(17.7600, -92.5950),
         initialZoom: 15.0,
@@ -232,7 +297,7 @@ class _HomePassengerState extends State<HomePassenger> {
             markers: [
               Marker(
                 point: LatLng(_selectedDestination!.coordinates.latitude, _selectedDestination!.coordinates.longitude),
-                child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                child: const Icon(Icons.location_on, color: Colors.blue, size: 40),
               ),
             ],
           ),

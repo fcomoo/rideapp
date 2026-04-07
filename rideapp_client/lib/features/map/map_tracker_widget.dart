@@ -63,7 +63,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
       builder: (context, snapshot) {
         final trip = snapshot.data;
         final List<LatLng> polyPoints = trip?.route.map(_toLatLng).toList() ?? [];
-        final lastPoint = polyPoints.isNotEmpty ? polyPoints.last : const LatLng(17.7628, -92.5317);
+        final lastPoint = polyPoints.isNotEmpty ? polyPoints.last : const LatLng(17.7600, -92.5950);
 
         if (trip != null && polyPoints.isNotEmpty) {
            WidgetsBinding.instance.addPostFrameCallback((_) {

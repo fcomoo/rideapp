@@ -13,6 +13,7 @@ import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
+import 'package:rideapp_client/features/chat/chat_screen.dart';
 
 class HomeDriver extends StatefulWidget {
   final String driverId;
@@ -283,8 +284,60 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
                 : _buildRadarMap(driver),
               _buildTopPanel(driver),
               Align(alignment: Alignment.bottomCenter, child: _buildBottomPanel(driver, activeTrip)),
+              
+              if (activeTrip != null)
+                Positioned(
+                  right: 20,
+                  bottom: 140, // Por encima del panel del conductor
+                  child: _buildChatButton(activeTrip),
+                ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildChatButton(Trip activeTrip) {
+    return StreamBuilder<Map<String, int>>(
+      stream: GravityStore().unreadStream,
+      builder: (context, snapshot) {
+        final unreadCount = (snapshot.data ?? GravityStore().unreadCounts)[activeTrip.id] ?? 0;
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            FloatingActionButton(
+              backgroundColor: const Color(0xFF1C1C1C),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    trip: activeTrip,
+                    currentUserId: widget.driverId,
+                    otherUserName: "Pasajero", // Podríamos obtener el nombre real del GravityStore si estuviera disponible
+                    senderRole: 'driver',
+                  ),
+                ),
+              ),
+              child: const Icon(Icons.chat_bubble_outline, color: Color(0xFFFF6B00)),
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: -4,
+                top: -4,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  child: Text(
+                    '$unreadCount',
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );
