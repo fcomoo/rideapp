@@ -14,6 +14,7 @@ import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
+import 'package:rideapp_client/features/sos/sos_button.dart';
 
 class HomeDriver extends StatefulWidget {
   final String driverId;
@@ -291,6 +292,15 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
                   bottom: 140, // Por encima del panel del conductor
                   child: _buildChatButton(activeTrip),
                 ),
+
+              Positioned(
+                left: 20,
+                bottom: activeTrip != null ? 140 : 120, // Visible sobre el mapa
+                child: SOSButton(
+                  userId: widget.driverId,
+                  tripId: activeTrip?.id,
+                ),
+              ),
             ],
           ),
         );

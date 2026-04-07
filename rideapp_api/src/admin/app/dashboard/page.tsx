@@ -2,6 +2,7 @@ import { Activity, Car, CheckCircle, DollarSign } from 'lucide-react';
 import KPICard from '@/components/dashboard/KPICard';
 import AnalyticsChart from '@/components/dashboard/AnalyticsChart';
 import StatusTable from '@/components/dashboard/StatusTable';
+import SOSMonitor from '@/components/dashboard/SOSMonitor';
 
 async function getStats() {
   const res = await fetch('http://localhost:3000/api/stats', { cache: 'no-store' });
@@ -21,6 +22,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <SOSMonitor />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

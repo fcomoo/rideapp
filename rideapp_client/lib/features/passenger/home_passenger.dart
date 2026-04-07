@@ -17,6 +17,7 @@ import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/core/utils/mock_traffic.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
+import 'package:rideapp_client/features/sos/sos_button.dart';
 
 class HomePassenger extends StatefulWidget {
   final String currentUserId;
@@ -209,6 +210,15 @@ class _HomePassengerState extends State<HomePassenger> {
                   bottom: 220, // Por encima del panel inferior
                   child: _buildChatButton(activeTrip),
                 ),
+
+              Positioned(
+                left: 20,
+                bottom: activeTrip != null ? 300 : 120, // Ajustar posición según paneles
+                child: SOSButton(
+                  userId: widget.currentUserId,
+                  tripId: activeTrip?.id,
+                ),
+              ),
             ],
           );
         },

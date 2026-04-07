@@ -168,6 +168,22 @@ const start = async () => {
     return { success: true, message };
   });
 
+  // --- SOS Emergency System ---
+  server.post('/api/sos', async (request) => {
+    const { userId, tripId, lat, lng, timestamp, message } = request.body as any;
+    
+    console.log(`[SOS ALERT] User: ${userId}, Location: ${lat},${lng}, Time: ${new Date(timestamp).toISOString()}`);
+
+    // Publicar en el canal global de emergencias para el Dashboard Admin
+    await redisPub.publish('admin.emergency', JSON.stringify({
+      event: 'sos.alert',
+      channel: 'admin.emergency',
+      payload: { userId, tripId, lat, lng, timestamp, message }
+    }));
+
+    return { success: true };
+  });
+
   const port = Number(process.env.PORT) || 3000;
   await server.listen({ port, host: '0.0.0.0' });
   console.log(`[RideApp API] Running on port ${port}`);
