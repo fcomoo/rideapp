@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong2.dart' as ll;
+import 'package:latlong2/latlong.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/subscriptions/trip_subscription.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
@@ -38,9 +38,9 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
     super.dispose();
   }
 
-  /// Conversión UI-only a LatLng de latlong2
-  ll.LatLng _toLatLng(Coordinates coords) {
-    return ll.LatLng(coords.latitude, coords.longitude);
+  /// Conversión de Coordinates (dominio) a LatLng
+  LatLng _toLatLng(Coordinates coords) {
+    return LatLng(coords.latitude, coords.longitude);
   }
 
   Stream<Trip?> _getThrottledStream() {
@@ -62,10 +62,9 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
       initialData: _initialState,
       builder: (context, snapshot) {
         final trip = snapshot.data;
-        final List<ll.LatLng> polyPoints = trip?.route.map(_toLatLng).toList() ?? [];
-        final lastPoint = polyPoints.isNotEmpty ? polyPoints.last : ll.LatLng(0, 0);
+        final List<LatLng> polyPoints = trip?.route.map(_toLatLng).toList() ?? [];
+        final lastPoint = polyPoints.isNotEmpty ? polyPoints.last : const LatLng(0, 0);
 
-        // Actualizar centro del mapa automáticamente en cada actualización throttled
         if (trip != null && polyPoints.isNotEmpty) {
            WidgetsBinding.instance.addPostFrameCallback((_) {
              _mapController.move(lastPoint, 15);
@@ -101,6 +100,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
                     point: lastPoint,
                     width: 40,
                     height: 40,
+                    rotate: true,
                     child: const Icon(Icons.drive_eta, color: Color(0xFFFF6B00), size: 30),
                   ),
                 if (polyPoints.isNotEmpty)
@@ -108,6 +108,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
                      point: polyPoints.first,
                      width: 40,
                      height: 40,
+                     rotate: true,
                      child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 30),
                    ),
               ],

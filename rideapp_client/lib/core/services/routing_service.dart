@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:rideapp_client/domain/value_objects/simple_latlng.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 
 class RoutingService {
   static const String _osrmUrl = 'https://router.project-osrm.org/route/v1/driving';
 
-  static Future<List<Coordinates>> getRoute(Coordinates origin, Coordinates destination) async {
+  /// Obtiene la ruta entre dos puntos usando SimpleLatLng (clase nativa)
+  static Future<List<Coordinates>> getRoute(SimpleLatLng origin, SimpleLatLng destination) async {
     final url = Uri.parse(
       '$_osrmUrl/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson',
     );
@@ -22,7 +24,10 @@ class RoutingService {
       throw Exception('OSRM Error');
     } catch (e) {
       print('RoutingService Error: $e. Returning straight line fallback.');
-      return [origin, destination]; // Fallback: línea recta
+      return [
+        Coordinates(origin.latitude, origin.longitude), 
+        Coordinates(destination.latitude, destination.longitude)
+      ];
     }
   }
 }

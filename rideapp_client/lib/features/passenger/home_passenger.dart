@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:rideapp_client/core/antigravity/client.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/antigravity/profile.dart';
 import 'package:rideapp_client/core/protocols/trip_protocol.dart';
 import 'package:rideapp_client/core/services/geocoding_service.dart';
 import 'package:rideapp_client/core/services/routing_service.dart';
+import 'package:rideapp_client/domain/value_objects/simple_latlng.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
@@ -60,7 +63,7 @@ class _HomePassengerState extends State<HomePassenger> {
     });
 
     // Mock Origin (en una app real vendría del GPS)
-    const origin = Coordinates(19.4326, -99.1332); 
+    const origin = SimpleLatLng(19.4326, -99.1332); 
     
     final route = await RoutingService.getRoute(origin, result.coordinates);
     
@@ -98,7 +101,6 @@ class _HomePassengerState extends State<HomePassenger> {
             children: [
               _buildMainContent(activeTrip),
 
-              // Buscador de Destino (Solo en IDLE)
               if (activeTrip == null) 
                 Positioned(
                   top: 60,
@@ -126,9 +128,6 @@ class _HomePassengerState extends State<HomePassenger> {
       return MapTrackerWidget(tripId: activeTrip.id);
     }
     
-    // Si tenemos una ruta previsualizada, mostramos un mapa con esa ruta
-    // (En esta implementación simplificada, MapTrackerWidget requiere un tripId)
-    // Mostramos un placeholder estilizado
     return Container(
       color: const Color(0xFF1C1C1C),
       child: Center(
@@ -147,7 +146,7 @@ class _HomePassengerState extends State<HomePassenger> {
           decoration: BoxDecoration(
             color: const Color(0xFF1C1C1C),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 10)],
+            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
             border: Border.all(color: Colors.white10),
           ),
           child: TextField(
@@ -164,7 +163,7 @@ class _HomePassengerState extends State<HomePassenger> {
         ),
         if (_isSearching)
           Container(
-            margin: const EdgeInsets.top(8),
+            margin: const EdgeInsets.only(top: 8),
             decoration: BoxDecoration(
               color: const Color(0xFF1C1C1C),
               borderRadius: BorderRadius.circular(16),
@@ -306,7 +305,6 @@ class _HomePassengerState extends State<HomePassenger> {
     );
   }
 
-  // --- UI Helpers ---
   BoxDecoration _panelDecoration() {
     return const BoxDecoration(
       color: Color(0xFF1C1C1C),
@@ -348,17 +346,14 @@ class _HomePassengerState extends State<HomePassenger> {
     );
   }
 
-  // --- Lógica ---
   void _handleRequestTrip(BuildContext context) {
     if (_selectedDestination == null) return;
-
     final newTrip = Trip(
       id: 'trip-${DateTime.now().millisecondsSinceEpoch}',
       clientId: widget.currentUserId,
       status: TripStatus.requested,
       route: _previewRoute,
     );
-
     TripRequestProtocol.requestTrip(
       trip: newTrip,
       origin: _previewRoute.first,
@@ -375,7 +370,7 @@ class _HomePassengerState extends State<HomePassenger> {
       currentTrip: trip,
       nextTrip: trip.copyWith(status: TripStatus.cancelled),
       onCommit: (t) => Antigravity.emit('trip.cancelled', {'tripId': t.id}),
-      onRollback: (_) => print('Rollback manual'),
+      onRollback: (_) => print('Rollback'),
     );
   }
 
