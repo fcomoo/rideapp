@@ -462,14 +462,14 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
       mapController: _mapController,
       options: MapOptions(
         initialCenter: const LatLng(17.7600, -92.5950),
-        initialZoom: 14.0,
+        initialZoom: 16.0,
         backgroundColor: const Color(0xFF121212),
       ),
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.rideapp.client',
-          maxZoom: 18,
+          maxZoom: 19,
         ),
         MarkerLayer(markers: markers),
       ],
