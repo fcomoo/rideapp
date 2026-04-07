@@ -42,3 +42,13 @@ model LocationRecord {
   speed     Float
   timestamp BigInt
 }
+
+model NegotiationOffer {
+  id            String   @id @default(uuid())
+  tripId        String
+  driverId      String
+  offeredPrice  Float
+  counterPrice  Float?
+  status        String   // pending, counter, accepted, rejected, cancelled
+  createdAt     DateTime @default(now())
+}

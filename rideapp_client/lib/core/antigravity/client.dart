@@ -5,6 +5,7 @@ import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/antigravity/profile.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
+import 'package:rideapp_client/domain/entities/negotiation_offer.dart';
 
 /// The engine that handles emissions and mutations via WebSocket Bridge.
 class Antigravity {
@@ -111,6 +112,8 @@ class AntigravityClient {
         GravityStore().updateTrip(Trip.fromJson(payload));
       } else if (event.contains('driver')) {
         GravityStore().updateDriver(Driver.fromJson(payload));
+      } else if (event.contains('negotiation')) {
+        GravityStore().updateOffer(NegotiationOffer.fromJson(payload));
       }
     } catch (e) {
       print('Antigravity [SYNC]: Error processing network message: $e');
