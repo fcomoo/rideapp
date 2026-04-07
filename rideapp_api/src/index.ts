@@ -193,36 +193,41 @@ const start = async () => {
       return reply.code(400).send({ error: 'Rating must be between 1 and 5' });
     }
 
-    // Prevención de duplicados (409 Conflict)
-    const existing = await (prisma as any).rating.findFirst({
-      where: { tripId, ratedBy }
-    });
-    
-    if (existing) {
-      return reply.code(409).send({ error: 'Este viaje ya ha sido calificado por ti' });
-    }
-
-    // Guardar calificación
-    const newRating = await (prisma as any).rating.create({
-      data: { tripId, ratedBy, ratedUserId, rating, comment }
-    });
-
-    // Actualizar promedio del Driver si es calificado por el pasajero
-    if (ratedBy === 'passenger') {
-      const allRatings = await (prisma as any).rating.findMany({
-        where: { ratedUserId, ratedBy: 'passenger' }
+    try {
+      // Prevención de duplicados (409 Conflict)
+      const existing = await (prisma as any).rating.findFirst({
+        where: { tripId, ratedBy }
       });
       
-      const total = allRatings.reduce((acc: number, r: any) => acc + r.rating, 0);
-      const average = total / allRatings.length;
+      if (existing) {
+        return reply.code(409).send({ error: 'Este viaje ya ha sido calificado por ti' });
+      }
 
-      await (prisma as any).driver.update({
-        where: { id: ratedUserId },
-        data: { rating: average }
+      // Guardar calificación
+      const newRating = await (prisma as any).rating.create({
+        data: { tripId, ratedBy, ratedUserId, rating, comment }
       });
-    }
 
-    return { success: true, rating: newRating };
+      // Actualizar promedio del Driver si es calificado por el pasajero
+      if (ratedBy === 'passenger') {
+        const allRatings = await (prisma as any).rating.findMany({
+          where: { ratedUserId, ratedBy: 'passenger' }
+        });
+        
+        const total = allRatings.reduce((acc: number, r: any) => acc + r.rating, 0);
+        const average = total / allRatings.length;
+
+        await (prisma as any).driver.update({
+          where: { id: ratedUserId },
+          data: { rating: average }
+        });
+      }
+
+      return { success: true, rating: newRating };
+    } catch (err) {
+      console.error("[BACKEND RATING ERROR]", err);
+      reply.code(500).send({ error: 'Rating failed' });
+    }
   });
 
   const port = Number(process.env.PORT) || 3000;
