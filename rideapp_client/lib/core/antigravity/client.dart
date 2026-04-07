@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/antigravity/profile.dart';
+import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/entities/negotiation_offer.dart';
@@ -123,7 +124,20 @@ class AntigravityClient {
       Antigravity._emitLocal(event, payload);
 
       // Reactive Sync with GravityStore
-      if (event.contains('trip')) {
+       if (event == 'driver.location') {
+        final store = GravityStore();
+        final current = store.currentDrivers[payload['driverId']] ?? Driver(
+          id: payload['driverId'],
+          vehicleDetails: {'model': 'Generic car', 'plate': 'RideApp'},
+          currentLocation: Coordinates(payload['lat'], payload['lng']),
+          rating: 5.0,
+          isOnline: true,
+        );
+        store.updateDriver(current.copyWith(
+          currentLocation: Coordinates(payload['lat'], payload['lng']),
+          heading: (payload['heading'] as num?)?.toDouble() ?? 0.0,
+        ));
+      } else if (event.contains('trip')) {
         GravityStore().updateTrip(Trip.fromJson(payload));
       } else if (event.contains('driver')) {
         GravityStore().updateDriver(Driver.fromJson(payload));

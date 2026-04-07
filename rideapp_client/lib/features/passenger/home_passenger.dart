@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -13,6 +14,8 @@ import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
+import 'package:rideapp_client/core/utils/geo_utils.dart';
+import 'package:rideapp_client/core/utils/mock_traffic.dart';
 
 class HomePassenger extends StatefulWidget {
   final String currentUserId;
@@ -32,11 +35,83 @@ class _HomePassengerState extends State<HomePassenger> {
   SearchResult? _selectedDestination;
   List<Coordinates> _previewRoute = [];
   bool _isCalculatingRoute = false;
+  
+  // Local Mock Traffic
+  final List<Driver> _localMockDrivers = [];
+  Timer? _mockTrafficTimer;
+  int _tick = 0;
 
   @override
   void initState() {
     super.initState();
     _setupSearchDebounce();
+    _initLocalMockDrivers();
+    _startLocalMockTraffic();
+    
+    // Conectar al canal global de ubicaciones
+    AntigravityClient().connect('drivers.locations');
+  }
+
+  void _initLocalMockDrivers() {
+    _localMockDrivers.addAll([
+      Driver(
+        id: 'mock-driver-1',
+        vehicleDetails: {'model': 'Toyota Corolla'},
+        currentLocation: const Coordinates(17.7650, -92.5900),
+        rating: 4.8,
+      ),
+      Driver(
+        id: 'mock-driver-2',
+        vehicleDetails: {'model': 'Nissan Versa'},
+        currentLocation: const Coordinates(17.7580, -92.5850),
+        rating: 4.9,
+      ),
+      Driver(
+        id: 'mock-driver-3',
+        vehicleDetails: {'model': 'VW Vento'},
+        currentLocation: const Coordinates(17.7620, -92.5980),
+        rating: 4.7,
+      ),
+    ]);
+  }
+
+  void _startLocalMockTraffic() {
+    _mockTrafficTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      _tick++;
+      
+      setState(() {
+        // Driver 1: Norte-Sur cada 2 seg
+        if (_tick % 2 == 0) {
+          final d1 = _localMockDrivers[0];
+          final latOffset = (sin(_tick * 0.5) * 0.001);
+          _localMockDrivers[0] = d1.copyWith(
+            currentLocation: Coordinates(17.7650 + latOffset, -92.5900),
+            heading: latOffset > 0 ? 0.0 : 180.0,
+          );
+        }
+
+        // Driver 2: Este-Oeste cada 2 seg
+        if (_tick % 2 == 0) {
+          final d2 = _localMockDrivers[1];
+          final lngOffset = (cos(_tick * 0.5) * 0.001);
+          _localMockDrivers[1] = d2.copyWith(
+            currentLocation: Coordinates(17.7580, -92.5850 + lngOffset),
+            heading: lngOffset > 0 ? 90.0 : 270.0,
+          );
+        }
+
+        // Driver 3: Diagonal cada 3 seg
+        if (_tick % 3 == 0) {
+          final d3 = _localMockDrivers[2];
+          final offset = (sin(_tick * 0.3) * 0.001);
+          _localMockDrivers[2] = d3.copyWith(
+            currentLocation: Coordinates(17.7620 + offset, -92.5980 + offset),
+            heading: 45.0,
+          );
+        }
+      });
+    });
   }
 
   void _setupSearchDebounce() {
@@ -79,6 +154,8 @@ class _HomePassengerState extends State<HomePassenger> {
   void dispose() {
     _searchDebounce.close();
     _destinationController.dispose();
+    _mockTrafficTimer?.cancel();
+    MockTraffic.stop();
     super.dispose();
   }
 
@@ -131,7 +208,7 @@ class _HomePassengerState extends State<HomePassenger> {
     return FlutterMap(
       options: MapOptions(
         initialCenter: const LatLng(17.7600, -92.5950),
-        initialZoom: 14.5,
+        initialZoom: 15.0,
         backgroundColor: Colors.grey[200]!,
       ),
       children: [
@@ -161,6 +238,44 @@ class _HomePassengerState extends State<HomePassenger> {
           ),
         if (_isCalculatingRoute)
           const Center(child: CircularProgressIndicator(color: Color(0xFFFF6B00))),
+
+        // Real-time Drivers Layers
+        StreamBuilder<Map<String, Driver>>(
+          stream: GravityStore().driversStream,
+          builder: (context, snapshot) {
+            final drivers = snapshot.data ?? GravityStore().currentDrivers;
+            final nearbyDrivers = drivers.values.where((d) {
+              final distance = GeoUtils.calculateDistance(
+                const Coordinates(17.7600, -92.5950), // Centro Macuspana
+                d.currentLocation,
+              );
+              return distance <= 5000; // 5km radius
+            }).toList();
+
+            return MarkerLayer(
+              markers: nearbyDrivers.map((driver) {
+                return Marker(
+                  point: LatLng(driver.currentLocation.latitude, driver.currentLocation.longitude),
+                  width: 50,
+                  height: 50,
+                  child: AnimatedDriverMarker(driver: driver),
+                );
+              }).toList(),
+            );
+          },
+        ),
+
+        // Local Mock Drivers Layer
+        MarkerLayer(
+          markers: _localMockDrivers.map((driver) {
+            return Marker(
+              point: LatLng(driver.currentLocation.latitude, driver.currentLocation.longitude),
+              width: 50,
+              height: 50,
+              child: AnimatedDriverMarker(driver: driver, isMock: true),
+            );
+          }).toList(),
+        ),
       ],
     );
   }
@@ -406,5 +521,94 @@ class _HomePassengerState extends State<HomePassenger> {
       'tripId': trip.id,
       'userId': widget.currentUserId,
     });
+  }
+}
+
+class AnimatedDriverMarker extends StatefulWidget {
+  final Driver driver;
+  final bool isMock;
+  const AnimatedDriverMarker({super.key, required this.driver, this.isMock = false});
+
+  @override
+  State<AnimatedDriverMarker> createState() => _AnimatedDriverMarkerState();
+}
+
+class _AnimatedDriverMarkerState extends State<AnimatedDriverMarker>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Tween<double> _latTween;
+  late Tween<double> _lngTween;
+  late Tween<double> _angleTween;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _latTween = Tween(begin: widget.driver.currentLocation.latitude, end: widget.driver.currentLocation.latitude);
+    _lngTween = Tween(begin: widget.driver.currentLocation.longitude, end: widget.driver.currentLocation.longitude);
+    _angleTween = Tween(begin: widget.driver.heading, end: widget.driver.heading);
+  }
+
+  @override
+  void didUpdateWidget(AnimatedDriverMarker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.driver.currentLocation != widget.driver.currentLocation ||
+        oldWidget.driver.heading != widget.driver.heading) {
+      
+      _latTween = Tween(begin: _latTween.evaluate(_controller), end: widget.driver.currentLocation.latitude);
+      _lngTween = Tween(begin: _lngTween.evaluate(_controller), end: widget.driver.currentLocation.longitude);
+      
+      // Manejar el salto de 360 a 0 grados para rotación suave
+      double endAngle = widget.driver.heading;
+      double startAngle = _angleTween.evaluate(_controller);
+      if ((endAngle - startAngle).abs() > 180) {
+        if (endAngle > startAngle) startAngle += 360; else endAngle += 360;
+      }
+      _angleTween = Tween(begin: startAngle, end: endAngle);
+
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.rotate(
+          angle: _angleTween.evaluate(_controller) * (3.14159 / 180),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  widget.driver.id.substring(0, 4).toUpperCase(),
+                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Icon(
+                widget.isMock ? Icons.directions_car : Icons.drive_eta,
+                color: const Color(0xFFFF6B00),
+                size: widget.isMock ? 35 : 30,
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

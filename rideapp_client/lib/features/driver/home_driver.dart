@@ -28,6 +28,8 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
   late DriverSubscription _driverSubscription;
   final LocationBroadcastProtocol _broadcastProtocol = LocationBroadcastProtocol();
   StreamSubscription<Position>? _positionStream;
+  Timer? _simulationTimer;
+  double _currentHeading = 0.0;
   
   // Mock Passengers (Macuspana area)
   final List<Coordinates> _mockPassengers = [
@@ -82,8 +84,10 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
       });
       
       store.updateDriver(currentDriver.copyWith(isOnline: true));
+      _startMovementSimulation();
     } else {
       _stopBroadcasting();
+      _stopMovementSimulation();
       
       Antigravity.emit('driver.status', {
         'driverId': widget.driverId,
@@ -92,6 +96,51 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
       
       store.updateDriver(currentDriver.copyWith(isOnline: false));
     }
+  }
+
+  void _startMovementSimulation() {
+    _simulationTimer?.cancel();
+    _simulationTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      final store = GravityStore();
+      final currentDriver = store.currentDrivers[widget.driverId];
+      if (currentDriver == null || !currentDriver.isOnline) {
+        timer.cancel();
+        return;
+      }
+
+      // Variación controlada de coordenadas (±0.0005 para realismo en 3s)
+      final double latMove = (DateTime.now().millisecond % 10 - 5) * 0.0001;
+      final double lngMove = (DateTime.now().second % 10 - 5) * 0.0001;
+      
+      final newCoords = Coordinates(
+        currentDriver.currentLocation.latitude + latMove,
+        currentDriver.currentLocation.longitude + lngMove,
+      );
+
+      // Calcular dirección (Heading)
+      _currentHeading = GeoUtils.calculateBearing(
+        currentDriver.currentLocation,
+        newCoords,
+      );
+
+      // Emitir al canal global drivers.locations
+      Antigravity.emit('driver.location', {
+        'driverId': widget.driverId,
+        'lat': newCoords.latitude,
+        'lng': newCoords.longitude,
+        'heading': _currentHeading,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      // Actualizar estado local
+      store.updateDriver(currentDriver.copyWith(currentLocation: newCoords));
+      _mapController.move(LatLng(newCoords.latitude, newCoords.longitude), _mapController.camera.zoom);
+    });
+  }
+
+  void _stopMovementSimulation() {
+    _simulationTimer?.cancel();
+    _simulationTimer = null;
   }
 
   Future<bool> _handlePermissions() async {
@@ -261,7 +310,10 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
               border: Border.all(color: driver.isOnline ? Colors.green : Colors.grey, width: 3),
             ),
           ),
-          const Icon(Icons.drive_eta, color: Colors.blue, size: 24),
+          Transform.rotate(
+            angle: _currentHeading * (3.14159 / 180),
+            child: const Icon(Icons.drive_eta, color: Colors.blue, size: 28),
+          ),
         ],
       ),
     ));

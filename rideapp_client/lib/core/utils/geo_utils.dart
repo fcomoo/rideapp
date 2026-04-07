@@ -38,6 +38,21 @@ class GeoUtils {
     return (distanceMeters / timeSeconds) * 3.6;
   }
 
+  static double calculateBearing(Coordinates start, Coordinates end) {
+    final double lat1 = _toRadians(start.latitude);
+    final double lon1 = _toRadians(start.longitude);
+    final double lat2 = _toRadians(end.latitude);
+    final double lon2 = _toRadians(end.longitude);
+
+    final double dLon = lon2 - lon1;
+
+    final double y = sin(dLon) * cos(lat2);
+    final double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+
+    final double radians = atan2(y, x);
+    return (radians * 180 / pi + 360) % 360;
+  }
+
   static double _toRadians(double degree) {
     return degree * pi / 180;
   }

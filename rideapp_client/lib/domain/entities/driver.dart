@@ -8,6 +8,7 @@ class Driver {
   final bool isOnline;
   final int nearbyCount;
   final double dailyEarnings;
+  final double heading;
 
   Driver({
     required this.id,
@@ -17,6 +18,7 @@ class Driver {
     this.isOnline = false,
     this.nearbyCount = 0,
     this.dailyEarnings = 0.0,
+    this.heading = 0.0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +32,7 @@ class Driver {
     'is_online': isOnline,
     'nearby_count': nearbyCount,
     'daily_earnings': dailyEarnings,
+    'heading': heading,
   };
 
   factory Driver.fromJson(Map<String, dynamic> json) => Driver(
@@ -43,6 +46,7 @@ class Driver {
     isOnline: json['is_online'] ?? false,
     nearbyCount: json['nearby_count'] ?? 0,
     dailyEarnings: json['daily_earnings']?.toDouble() ?? 0.0,
+    heading: (json['heading'] as num?)?.toDouble() ?? 0.0,
   );
 
   Driver copyWith({
@@ -53,6 +57,7 @@ class Driver {
     bool? isOnline,
     int? nearbyCount,
     double? dailyEarnings,
+    double? heading,
   }) {
     return Driver(
       id: id ?? this.id,
@@ -62,6 +67,7 @@ class Driver {
       isOnline: isOnline ?? this.isOnline,
       nearbyCount: nearbyCount ?? this.nearbyCount,
       dailyEarnings: dailyEarnings ?? this.dailyEarnings,
+      heading: heading ?? this.heading,
     );
   }
 }

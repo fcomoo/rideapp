@@ -135,6 +135,21 @@ const start = async () => {
     return { success: true, trip };
   });
 
+  // --- Real-time Tracking ---
+  server.post('/api/drivers/location', async (request) => {
+    const { driverId, lat, lng } = request.body as any;
+    const timestamp = Date.now();
+
+    // Broadcast efímero vía Redis
+    await redisPub.publish('drivers.locations', JSON.stringify({
+      event: 'driver.location',
+      channel: 'drivers.locations',
+      payload: { driverId, lat, lng, timestamp }
+    }));
+
+    return { success: true };
+  });
+
   const port = Number(process.env.PORT) || 3000;
   await server.listen({ port, host: '0.0.0.0' });
   console.log(`[RideApp API] Running on port ${port}`);
