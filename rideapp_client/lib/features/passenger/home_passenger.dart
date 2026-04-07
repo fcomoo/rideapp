@@ -19,6 +19,7 @@ import 'package:rideapp_client/core/utils/mock_traffic.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
 import 'package:rideapp_client/features/sos/sos_button.dart';
 import 'package:rideapp_client/features/rating/rating_screen.dart';
+import 'package:rideapp_client/features/profile/passenger_profile_screen.dart';
 
 class HomePassenger extends StatefulWidget {
   final String currentUserId;
@@ -403,25 +404,49 @@ class _HomePassengerState extends State<HomePassenger> {
   Widget _buildSearchContainer() {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1C),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
-            border: Border.all(color: Colors.white10),
-          ),
-          child: TextField(
-            controller: _destinationController,
-            style: const TextStyle(color: Colors.white),
-            onChanged: (val) => _searchDebounce.add(val),
-            decoration: const InputDecoration(
-              hintText: '¿A dónde vas?',
-              hintStyle: TextStyle(color: Colors.white24),
-              border: InputBorder.none,
-              icon: Icon(Icons.search, color: Color(0xFFFF6B00)),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1C),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: TextField(
+                  controller: _destinationController,
+                  style: const TextStyle(color: Colors.white),
+                  onChanged: (val) => _searchDebounce.add(val),
+                  decoration: const InputDecoration(
+                    hintText: '¿A dónde vas?',
+                    hintStyle: TextStyle(color: Colors.white24),
+                    border: InputBorder.none,
+                    icon: Icon(Icons.search, color: Color(0xFFFF6B00)),
+                  ),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PassengerProfileScreen()),
+              ),
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1C),
+                  shape: BoxShape.circle,
+                  boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)],
+                  border: Border.all(color: const Color(0xFFFF6B00).withOpacity(0.3), width: 1.5),
+                ),
+                child: const Icon(Icons.person_rounded, color: Color(0xFFFF6B00), size: 28),
+              ),
+            ),
+          ],
         ),
         if (_isSearching)
           Container(
