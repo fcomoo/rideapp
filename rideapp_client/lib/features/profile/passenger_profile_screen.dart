@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:rideapp_client/features/rating/rating_widget.dart';
+import 'package:rideapp_client/features/history/trip_history_screen.dart';
 
 class PassengerProfileScreen extends StatelessWidget {
   const PassengerProfileScreen({super.key});
@@ -32,6 +33,15 @@ class PassengerProfileScreen extends StatelessWidget {
             _buildHeader(),
             const SizedBox(height: 32),
             _buildStatsSection(),
+            const SizedBox(height: 12),
+            _buildTextActionButton(
+              "Ver historial completo", 
+              Icons.history_rounded,
+              onTap: () => Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (_) => const TripHistoryScreen(userId: 'maria-gonzalez-123'))
+              )
+            ),
             const SizedBox(height: 24),
             _buildPaymentMethodsSection(),
             const SizedBox(height: 24),
@@ -292,18 +302,21 @@ class PassengerProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTextActionButton(String label, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFFFF6B00), size: 20),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-        ],
+  Widget _buildTextActionButton(String label, IconData icon, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFFFF6B00), size: 20),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: const TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ],
+        ),
       ),
     );
   }
