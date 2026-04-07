@@ -71,49 +71,75 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
            });
         }
 
-        return FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: lastPoint,
-            initialZoom: 15,
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.rideapp.client',
-            ),
-            if (polyPoints.isNotEmpty)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: polyPoints,
-                    strokeWidth: 4,
-                    color: const Color(0xFFFF6B00),
+        return Container(
+          color: const Color(0xFF1A1A2E),
+          child: Stack(
+            children: [
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: lastPoint,
+                  initialZoom: 15,
+                  backgroundColor: const Color(0xFF1A1A2E),
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.rideapp.client',
+                    maxZoom: 18,
+                  ),
+                  if (polyPoints.isNotEmpty)
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: polyPoints,
+                          strokeWidth: 4,
+                          color: const Color(0xFFFF6B00),
+                        ),
+                      ],
+                    ),
+                  MarkerLayer(
+                    markers: [
+                      if (polyPoints.isNotEmpty)
+                        Marker(
+                          point: lastPoint,
+                          width: 40,
+                          height: 40,
+                          rotate: true,
+                          child: const Icon(Icons.drive_eta, color: Color(0xFFFF6B00), size: 30),
+                        ),
+                      if (polyPoints.isNotEmpty)
+                         Marker(
+                           point: polyPoints.first,
+                           width: 40,
+                           height: 40,
+                           rotate: true,
+                           child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 30),
+                         ),
+                    ],
                   ),
                 ],
               ),
-            MarkerLayer(
-              markers: [
-                if (polyPoints.isNotEmpty)
-                  Marker(
-                    point: lastPoint,
-                    width: 40,
-                    height: 40,
-                    rotate: true,
-                    child: const Icon(Icons.drive_eta, color: Color(0xFFFF6B00), size: 30),
+              if (polyPoints.isEmpty)
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.map_outlined, color: Color(0xFFFF6B00), size: 64),
+                      const SizedBox(height: 16),
+                      Text(
+                        "📍 Mapa listo - Ingresa tu destino",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                if (polyPoints.isNotEmpty)
-                   Marker(
-                     point: polyPoints.first,
-                     width: 40,
-                     height: 40,
-                     rotate: true,
-                     child: const Icon(Icons.person_pin_circle, color: Colors.blue, size: 30),
-                   ),
-              ],
-            ),
-          ],
+                ),
+            ],
+          ),
         );
       },
     );
