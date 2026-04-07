@@ -16,6 +16,7 @@ import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
 import 'package:rideapp_client/features/sos/sos_button.dart';
 import 'package:rideapp_client/features/rating/rating_screen.dart';
+import 'package:rideapp_client/features/profile/driver_profile_screen.dart';
 
 class HomeDriver extends StatefulWidget {
   final String driverId;
@@ -337,6 +338,29 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
                 child: SOSButton(
                   userId: widget.driverId,
                   tripId: activeTrip?.id,
+                ),
+              ),
+
+              // --- Botón de Perfil (Esquina superior derecha) ---
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 16,
+                right: 20,
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const DriverProfileScreen()),
+                  ),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1C),
+                      shape: BoxShape.circle,
+                      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4))],
+                      border: Border.all(color: const Color(0xFFFF6B00).withOpacity(0.4), width: 1.5),
+                    ),
+                    child: const Icon(Icons.person_rounded, color: Color(0xFFFF6B00), size: 28),
+                  ),
                 ),
               ),
             ],
