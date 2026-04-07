@@ -8,6 +8,7 @@ import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/entities/negotiation_offer.dart';
 import 'package:rideapp_client/domain/entities/chat_message.dart';
+import 'package:rideapp_client/core/services/notification_service.dart';
 
 /// The engine that handles emissions and mutations via WebSocket Bridge.
 class Antigravity {
@@ -139,13 +140,28 @@ class AntigravityClient {
           heading: (payload['heading'] as num?)?.toDouble() ?? 0.0,
         ));
       } else if (event.contains('trip')) {
-        GravityStore().updateTrip(Trip.fromJson(payload));
+        final trip = Trip.fromJson(payload);
+        GravityStore().updateTrip(trip);
+        
+        // Dispatch Notification for status changes
+        NotificationService().dispatchTripEvent(event, payload);
       } else if (event.contains('driver')) {
         GravityStore().updateDriver(Driver.fromJson(payload));
       } else if (event.contains('negotiation')) {
         GravityStore().updateOffer(NegotiationOffer.fromJson(payload));
+      } else if (event.contains('.request')) {
+        // Special case for Incoming Trip Requests to Driver
+        if (payload['trip'] != null) {
+          final trip = Trip.fromJson(payload['trip']);
+          GravityStore().updateTrip(trip);
+          NotificationService().dispatchTripEvent('trip.requested', payload['trip']);
+        }
       } else if (event == 'chat.message') {
-        GravityStore().addMessage(ChatMessage.fromJson(payload));
+        final message = ChatMessage.fromJson(payload);
+        GravityStore().addMessage(message);
+        
+        // Dispatch Notification for chat
+        NotificationService().dispatchTripEvent(event, payload);
       }
     } catch (e) {
       print('Antigravity [SYNC]: Error processing network message: $e');

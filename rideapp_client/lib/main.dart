@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:rideapp_client/features/passenger/home_passenger.dart';
 import 'package:rideapp_client/features/driver/home_driver.dart';
+import 'package:rideapp_client/core/services/notification_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init();
   runApp(const RideApp());
 }
 

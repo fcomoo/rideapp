@@ -7,6 +7,8 @@ import 'package:rideapp_client/core/subscriptions/trip_subscription.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 
+import 'package:rideapp_client/core/services/notification_service.dart';
+
 class MapTrackerWidget extends StatefulWidget {
   final String tripId;
 
@@ -19,9 +21,11 @@ class MapTrackerWidget extends StatefulWidget {
 class _MapTrackerWidgetState extends State<MapTrackerWidget> {
   late PassengerSubscription _subscription;
   final MapController _mapController = MapController();
+  final Distance _distanceCalculator = const Distance();
   
   DateTime? _lastEmitTime;
   Trip? _initialState;
+  bool _arrivedNotified = false;
 
   @override
   void initState() {
@@ -69,6 +73,17 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
            WidgetsBinding.instance.addPostFrameCallback((_) {
              _mapController.move(lastPoint, 15);
            });
+
+           // Check for Arrival (Proximity Notification)
+           if (!_arrivedNotified && polyPoints.length >= 2) {
+             final distance = _distanceCalculator.as(LengthUnit.Meter, polyPoints.first, lastPoint);
+             if (distance < 200) {
+               _arrivedNotified = true;
+               NotificationService().dispatchTripEvent('trip.arrived', {
+                 'driverName': 'Tu conductor',
+               });
+             }
+           }
         }
 
         return Container(
