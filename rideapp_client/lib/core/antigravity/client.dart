@@ -13,6 +13,18 @@ class Antigravity {
   factory Antigravity() => _instance;
   Antigravity._internal();
 
+  static final _eventController = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Escucha eventos específicos de un canal.
+  static StreamSubscription<Map<String, dynamic>> on(String eventPattern, Function(Map<String, dynamic>) callback) {
+    return _eventController.stream.where((msg) => (msg['event'] as String).contains(eventPattern)).listen(callback);
+  }
+
+  /// Internal: Emite un evento al stream local (no a la red).
+  static void _emitLocal(String event, Map<String, dynamic> payload) {
+    _eventController.add({'event': event, 'payload': payload});
+  }
+
   /// Emits a message to the backend via WebSocket.
   /// Format: { event, channel, payload }
   static void emit(String event, Map<String, dynamic> data) {
@@ -106,6 +118,9 @@ class AntigravityClient {
       final Map<String, dynamic> data = jsonDecode(rawMessage as String);
       final String event = data['event'];
       final Map<String, dynamic> payload = data['payload'];
+
+      // Propagate to local listeners
+      Antigravity._emitLocal(event, payload);
 
       // Reactive Sync with GravityStore
       if (event.contains('trip')) {

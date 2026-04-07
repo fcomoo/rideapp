@@ -71,5 +71,11 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu ubicación para conectar con conductores cercanos y realizar el seguimiento del viaje.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Necesitamos tu ubicación en segundo plano para asegurar que el conductor pueda encontrarte incluso si bloqueas tu teléfono.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Ubicación necesaria para el servicio de transporte.</string>
 </dict>
 </plist>

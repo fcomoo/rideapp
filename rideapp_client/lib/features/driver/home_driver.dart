@@ -9,6 +9,7 @@ import 'package:rideapp_client/core/antigravity/profile.dart';
 import 'package:rideapp_client/core/protocols/trip_protocol.dart';
 import 'package:rideapp_client/core/subscriptions/trip_subscription.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
+import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
@@ -23,56 +24,73 @@ class HomeDriver extends StatefulWidget {
 }
 
 class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateMixin {
-  bool _isOnline = false;
-  Coordinates? _currentPosition;
-  
+  final MapController _mapController = MapController();
   late DriverSubscription _driverSubscription;
   final LocationBroadcastProtocol _broadcastProtocol = LocationBroadcastProtocol();
   StreamSubscription<Position>? _positionStream;
   
-  late AnimationController _bannerController;
-  late Animation<Offset> _bannerOffset;
-  int _lastNearbyCount = 0;
+  // Mock Passengers (Macuspana area)
+  final List<Coordinates> _mockPassengers = [
+    Coordinates(17.7650, -92.5290),
+    Coordinates(17.7600, -92.5350),
+    Coordinates(17.7680, -92.5280),
+  ];
 
   @override
   void initState() {
     super.initState();
     _driverSubscription = DriverSubscription(widget.driverId);
     
-    _bannerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _bannerOffset = Tween<Offset>(
-      begin: const Offset(0, -1.5),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _bannerController, curve: Curves.easeOut));
-
-    _driverSubscription.nearbyTripsStream.listen((trips) {
-      if (trips.length > _lastNearbyCount) {
-        _showNewTripBanner();
-      }
-      _lastNearbyCount = trips.length;
+    // Listen for requests on driver.{driverId}
+    Antigravity.on('driver.${widget.driverId}.request', (data) {
+      final trip = Trip.fromJson(data['trip']);
+      _showRequestBottomSheet(trip);
     });
+
+    // Initial state setup in GravityStore if not present
+    if (GravityStore().currentDrivers[widget.driverId] == null) {
+      GravityStore().updateDriver(Driver(
+        id: widget.driverId,
+        vehicleDetails: {'model': 'Tesla Model 3', 'plate': 'AG-2026'},
+        currentLocation: Coordinates(17.7628, -92.5317),
+        rating: 4.9,
+      ));
+    }
   }
 
   @override
   void dispose() {
     _stopBroadcasting();
     _driverSubscription.dispose();
-    _bannerController.dispose();
     super.dispose();
   }
 
   Future<void> _toggleOnline(bool value) async {
+    final store = GravityStore();
+    final currentDriver = store.currentDrivers[widget.driverId]!;
+    
     if (value) {
       final hasPermission = await _handlePermissions();
       if (!hasPermission) return;
       _startBroadcasting();
-      setState(() => _isOnline = true);
+      
+      // Notify backend
+      Antigravity.emit('driver.status', {
+        'driverId': widget.driverId,
+        'status': 'online',
+        'location': currentDriver.currentLocation.toJson(),
+      });
+      
+      store.updateDriver(currentDriver.copyWith(isOnline: true));
     } else {
       _stopBroadcasting();
-      setState(() => _isOnline = false);
+      
+      Antigravity.emit('driver.status', {
+        'driverId': widget.driverId,
+        'status': 'offline',
+      });
+      
+      store.updateDriver(currentDriver.copyWith(isOnline: false));
     }
   }
 
@@ -89,23 +107,31 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
   }
 
   void _startBroadcasting() {
-    Geolocator.getCurrentPosition().then((pos) {
-      final coords = Coordinates(pos.latitude, pos.longitude);
-      _driverSubscription.initTripListener(coords);
-      setState(() => _currentPosition = coords);
-    });
-
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
     ).listen((Position position) {
       final newCoords = Coordinates(position.latitude, position.longitude);
-      if (_driverSubscription.validateLocationSecurity(newCoords)) {
+      final store = GravityStore();
+      final currentDriver = store.currentDrivers[widget.driverId]!;
+
+      // Anti-spoofing validation
+      final speedKmh = GeoUtils.calculateSpeedKmh(
+        oldLocation: currentDriver.currentLocation,
+        oldTimestamp: DateTime.now().subtract(const Duration(seconds: 5)).millisecondsSinceEpoch,
+        newLocation: newCoords,
+        newTimestamp: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      if (speedKmh <= 200.0) {
         _broadcastProtocol.startBroadcasting(
           driverId: widget.driverId,
           getLatestLocation: () => newCoords,
           interval: AntigravityProfile.gpsInterval,
         );
-        setState(() => _currentPosition = newCoords);
+        store.updateDriver(currentDriver.copyWith(currentLocation: newCoords));
+        _mapController.move(LatLng(newCoords.latitude, newCoords.longitude), 14);
+      } else {
+        _showErrorSnackBar("Velocidad inusual detectada. Ubicación ignorada.");
       }
     });
   }
@@ -115,12 +141,74 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
     _broadcastProtocol.stop();
   }
 
-  void _showNewTripBanner() {
-    _bannerController.forward().then((_) {
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) _bannerController.reverse();
-      });
-    });
+  void _showRequestBottomSheet(Trip trip) {
+    int countdown = 30;
+    Timer? timer;
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: const Color(0xFF1C1C1C),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            timer ??= Timer.periodic(const Duration(seconds: 1), (t) {
+              if (countdown > 0) {
+                setModalState(() => countdown--);
+              } else {
+                t.cancel();
+                Navigator.pop(context);
+                Antigravity.emit('driver.timeout', {'tripId': trip.id, 'driverId': widget.driverId});
+              }
+            });
+
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("NUEVA SOLICITUD", style: TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold, fontSize: 18)),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: const Color(0xFFFF6B00).withOpacity(0.2), shape: BoxShape.circle),
+                        child: Text("$countdown", style: const TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildRequestInfo(Icons.my_location, "Origen", "Av. Reforma #123"),
+                  const SizedBox(height: 12),
+                  _buildRequestInfo(Icons.location_on, "Destino", "Polanco, Calle Horacio"),
+                  const Divider(color: Colors.white10, height: 32),
+                  Row(
+                    children: [
+                      Expanded(child: OutlinedButton(onPressed: () { timer?.cancel(); Navigator.pop(context); }, style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.white24), padding: const EdgeInsets.symmetric(vertical: 16)), child: const Text("RECHAZAR", style: TextStyle(color: Colors.white70)))),
+                      const SizedBox(width: 12),
+                      Expanded(child: ElevatedButton(onPressed: () { timer?.cancel(); Navigator.pop(context); TripAcceptProtocol.acceptTrip(trip: trip, driverId: widget.driverId, etaInMinutes: 5); }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6B00), padding: const EdgeInsets.symmetric(vertical: 16)), child: const Text("ACEPTAR"))),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestInfo(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white38, size: 20),
+        const SizedBox(width: 12),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12)), Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500))]),
+      ],
+    );
   }
 
   void _showErrorSnackBar(String message) {
@@ -129,87 +217,144 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      body: Stack(
+    return StreamBuilder<Map<String, Driver>>(
+      stream: GravityStore().driversStream,
+      builder: (context, snapshot) {
+        final driver = snapshot.data?[widget.driverId] ?? GravityStore().currentDrivers[widget.driverId]!;
+        final activeTrip = GravityStore().currentTrips.values.where((t) => 
+          t.driverId == widget.driverId && (t.status == TripStatus.accepted || t.status == TripStatus.inProgress)
+        ).firstOrNull;
+
+        return Scaffold(
+          backgroundColor: const Color(0xFF121212),
+          body: Stack(
+            children: [
+              activeTrip != null 
+                ? MapTrackerWidget(tripId: activeTrip.id)
+                : _buildRadarMap(driver),
+              _buildTopPanel(driver),
+              Align(alignment: Alignment.bottomCenter, child: _buildBottomPanel(driver, activeTrip)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRadarMap(Driver driver) {
+    final List<Marker> markers = [];
+    
+    // Driver marker
+    markers.add(Marker(
+      point: LatLng(driver.currentLocation.latitude, driver.currentLocation.longitude),
+      width: 60,
+      height: 60,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          _buildMapContent(),
-          SlideTransition(position: _bannerOffset, child: _buildNotificationBanner()),
-          SafeArea(child: Padding(padding: const EdgeInsets.all(16.0), child: _buildStateToggle())),
-          Align(alignment: Alignment.bottomCenter, child: AnimatedSwitcher(duration: const Duration(milliseconds: 300), child: _buildBottomUI())),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2196F3).withOpacity(0.2),
+              shape: BoxShape.circle,
+              border: Border.all(color: driver.isOnline ? Colors.green : Colors.grey, width: 3),
+            ),
+          ),
+          const Icon(Icons.drive_eta, color: Colors.blue, size: 24),
         ],
+      ),
+    ));
+
+    // Mock Passengers (only if Online)
+    if (driver.isOnline) {
+      for (var p in _mockPassengers) {
+        final distance = GeoUtils.calculateDistance(driver.currentLocation, p);
+        if (distance <= 5000) { // Radio de 5km
+          markers.add(Marker(
+            point: LatLng(p.latitude, p.longitude),
+            width: 40,
+            height: 40,
+            child: const Icon(Icons.person_pin_circle, color: Color(0xFFFF6B00), size: 32),
+          ));
+        }
+      }
+    }
+
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: LatLng(driver.currentLocation.latitude, driver.currentLocation.longitude),
+        initialZoom: 14,
+        backgroundColor: const Color(0xFF121212),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.rideapp.client',
+          maxZoom: 18,
+        ),
+        MarkerLayer(markers: markers),
+      ],
+    );
+  }
+
+  Widget _buildTopPanel(Driver driver) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1C), borderRadius: BorderRadius.circular(30), boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)]),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 10, height: 10, decoration: BoxDecoration(color: driver.isOnline ? Colors.green : Colors.grey, shape: BoxShape.circle)),
+                  const SizedBox(width: 12),
+                  Text(driver.isOnline ? "CONECTADO" : "DESCONECTADO", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  const SizedBox(width: 12),
+                  Switch(value: driver.isOnline, onChanged: _toggleOnline, activeColor: const Color(0xFFFF6B00)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildMapContent() {
-    final activeTrip = GravityStore().currentTrips.values.where((t) => 
-      t.driverId == widget.driverId && (t.status == TripStatus.accepted || t.status == TripStatus.inProgress)
-    ).firstOrNull;
-    if (activeTrip != null) return MapTrackerWidget(tripId: activeTrip.id);
-    return Container(color: const Color(0xFF1C1C1C), child: const Center(child: Icon(Icons.map, color: Colors.white24, size: 60)));
-  }
-
-  Widget _buildStateToggle() {
+  Widget _buildBottomPanel(Driver driver, Trip? activeTrip) {
+    if (activeTrip != null) return _buildActiveTripPanel(activeTrip);
+    
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1C), borderRadius: BorderRadius.circular(30), boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 10)]),
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(color: Color(0xFF1C1C1C), borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30))),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Text(_isOnline ? "CONECTADO" : "DESCONECTADO", style: TextStyle(color: _isOnline ? const Color(0xFFFF6B00) : Colors.white60, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 12),
-          Switch(value: _isOnline, onChanged: _toggleOnline, activeColor: const Color(0xFFFF6B00)),
+          _buildStat("Solicitudes", "${driver.nearbyCount}", Icons.radar),
+          _buildStat("Ganancias", "\$${driver.dailyEarnings.toStringAsFixed(2)}", Icons.account_balance_wallet),
+          _buildStat("Puntuación", "${driver.rating}", Icons.star),
         ],
       ),
     );
   }
 
-  Widget _buildBottomUI() {
-    return StreamBuilder<Map<String, Trip>>(
-      stream: GravityStore().tripsStream,
-      builder: (context, snapshot) {
-        final trips = snapshot.data ?? GravityStore().currentTrips;
-        final inProgressTrip = trips.values.where((t) => t.driverId == widget.driverId && (t.status == TripStatus.accepted || t.status == TripStatus.inProgress)).firstOrNull;
-        if (inProgressTrip != null) return _buildInProgressSection(inProgressTrip);
-        if (_isOnline) return _buildRadarSection();
-        return const SizedBox.shrink();
-      },
+  Widget _buildStat(String label, String value, IconData icon) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: const Color(0xFFFF6B00), size: 24),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+      ],
     );
   }
 
-  Widget _buildRadarSection() {
-    return StreamBuilder<List<Trip>>(
-      stream: _driverSubscription.nearbyTripsStream,
-      builder: (context, snapshot) {
-        final nearbyTrips = snapshot.data ?? [];
-        if (nearbyTrips.isEmpty) return _buildInfoPanel("Buscando viajes cercanos...");
-        return Container(height: 250, padding: const EdgeInsets.symmetric(vertical: 20), child: PageView.builder(itemCount: nearbyTrips.length, controller: PageController(viewportFraction: 0.9), itemBuilder: (context, index) => _buildTripCard(nearbyTrips[index])));
-      },
-    );
-  }
-
-  Widget _buildTripCard(Trip trip) {
-    final distance = _currentPosition != null && trip.route.isNotEmpty ? (GeoUtils.calculateDistance(_currentPosition!, trip.route.first) / 1000).toStringAsFixed(1) : "?";
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1C), borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFFF6B00).withOpacity(0.3))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Nuevo Viaje - $distance km", style: const TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold)), const Text("\$25.0", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold))]),
-          const Divider(color: Colors.white10, height: 20),
-          const Text("Origen: Av. Arce #243", style: TextStyle(color: Colors.white70)),
-          const Text("Destino: Sopocachi, Plaza Avaroa", style: TextStyle(color: Colors.white70)),
-          const Spacer(),
-          SizedBox(width: double.infinity, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF6B00)), onPressed: () => TripAcceptProtocol.acceptTrip(trip: trip, driverId: widget.driverId, etaInMinutes: 5), child: const Text("ACEPTAR")))
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInProgressSection(Trip trip) {
+  Widget _buildActiveTripPanel(Trip trip) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(color: Color(0xFF1C1C1C), borderRadius: BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30))),
@@ -219,7 +364,7 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
           Text(trip.status == TripStatus.accepted ? "YENDO POR PASAJERO" : "VIAJE EN CURSO", style: const TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: trip.status == TripStatus.accepted ? const Color(0xFFFF6B00) : Colors.green, minimumSize: const Size(double.infinity, 54)),
+            style: ElevatedButton.styleFrom(backgroundColor: trip.status == TripStatus.accepted ? const Color(0xFFFF6B00) : Colors.green, minimumSize: const Size(double.infinity, 54), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
             onPressed: () {
               if (trip.status == TripStatus.accepted) {
                 Antigravity.mutateTrip(currentTrip: trip, nextTrip: trip.copyWith(status: TripStatus.inProgress), onCommit: (t) => Antigravity.emit('trip.in_progress', {'t.id': t.id}), onRollback: (_) => _showErrorSnackBar("Error"));
@@ -227,18 +372,10 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
                 Antigravity.mutateTrip(currentTrip: trip, nextTrip: trip.copyWith(status: TripStatus.completed), onCommit: (t) => Antigravity.emit('trip.completed', {'t.id': t.id}), onRollback: (_) => _showErrorSnackBar("Error"));
               }
             },
-            child: Text(trip.status == TripStatus.accepted ? "RECOGER PASAJERO" : "FINALIZAR VIAJE"),
+            child: Text(trip.status == TripStatus.accepted ? "RECOGER PASAJERO" : "FINALIZAR VIAJE", style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildNotificationBanner() {
-    return SafeArea(child: Material(color: Colors.transparent, child: Container(margin: const EdgeInsets.all(16), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFFF6B00), borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]), child: const Row(children: [Icon(Icons.bolt, color: Colors.white), SizedBox(width: 12), Text("¡NUEVO VIAJE DISPONIBLE!", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]))));
-  }
-
-  Widget _buildInfoPanel(String text) {
-    return Container(margin: const EdgeInsets.all(16), padding: const EdgeInsets.symmetric(vertical: 20), color: Colors.transparent, child: Center(child: Text(text, style: const TextStyle(color: Colors.white38))));
   }
 }

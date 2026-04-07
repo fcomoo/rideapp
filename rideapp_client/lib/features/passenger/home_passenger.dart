@@ -63,7 +63,7 @@ class _HomePassengerState extends State<HomePassenger> {
     });
 
     // Mock Origin (en una app real vendría del GPS)
-    const origin = SimpleLatLng(19.4326, -99.1332); 
+    const origin = SimpleLatLng(17.7628, -92.5317); 
     
     final route = await RoutingService.getRoute(origin, result.coordinates);
     
@@ -128,13 +128,40 @@ class _HomePassengerState extends State<HomePassenger> {
       return MapTrackerWidget(tripId: activeTrip.id);
     }
     
-    return Container(
-      color: const Color(0xFF1C1C1C),
-      child: Center(
-        child: _isCalculatingRoute 
-          ? const CircularProgressIndicator(color: Color(0xFFFF6B00))
-          : const Icon(Icons.map_outlined, color: Colors.white24, size: 80),
+    return FlutterMap(
+      options: MapOptions(
+        initialCenter: const LatLng(17.7600, -92.5950),
+        initialZoom: 14.5,
+        backgroundColor: Colors.grey[200]!,
       ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'com.rideapp.client',
+          maxZoom: 18,
+        ),
+        if (_previewRoute.isNotEmpty)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: _previewRoute.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+                color: const Color(0xFFFF6B00),
+                strokeWidth: 4,
+              ),
+            ],
+          ),
+        if (_selectedDestination != null)
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: LatLng(_selectedDestination!.coordinates.latitude, _selectedDestination!.coordinates.longitude),
+                child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+              ),
+            ],
+          ),
+        if (_isCalculatingRoute)
+          const Center(child: CircularProgressIndicator(color: Color(0xFFFF6B00))),
+      ],
     );
   }
 
@@ -347,7 +374,7 @@ class _HomePassengerState extends State<HomePassenger> {
   }
 
   void _handleRequestTrip(BuildContext context) {
-    if (_selectedDestination == null) return;
+    if (_selectedDestination == null || _previewRoute.isEmpty) return;
     final newTrip = Trip(
       id: 'trip-${DateTime.now().millisecondsSinceEpoch}',
       clientId: widget.currentUserId,
