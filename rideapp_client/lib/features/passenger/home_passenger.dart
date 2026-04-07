@@ -18,6 +18,7 @@ import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/core/utils/mock_traffic.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
 import 'package:rideapp_client/features/sos/sos_button.dart';
+import 'package:rideapp_client/features/rating/rating_screen.dart';
 
 class HomePassenger extends StatefulWidget {
   final String currentUserId;
@@ -30,8 +31,10 @@ class HomePassenger extends StatefulWidget {
 
 class _HomePassengerState extends State<HomePassenger> {
   final TextEditingController _destinationController = TextEditingController();
-  final StreamController<String> _searchDebounce = StreamController<String>();
   final MapController _mapController = MapController();
+  final _searchDebounce = StreamController<String>();
+  StreamSubscription? _tripSub;
+  Timer? _mockTrafficTimer;
   Timer? _debounceTimer;
   List<SearchResult> _suggestions = [];
   bool _isSearching = false;
@@ -42,7 +45,6 @@ class _HomePassengerState extends State<HomePassenger> {
   
   // Local Mock Traffic
   final List<Driver> _localMockDrivers = [];
-  Timer? _mockTrafficTimer;
   int _tick = 0;
 
   @override
@@ -52,8 +54,50 @@ class _HomePassengerState extends State<HomePassenger> {
     _initLocalMockDrivers();
     _startLocalMockTraffic();
     
+    // Listener para detectar viajes completados y mostrar pantalla de calificación
+    _tripSub = GravityStore().tripsStream.listen((trips) {
+      final completedTrip = trips.values.where((t) => 
+        t.clientId == widget.currentUserId && 
+        t.status == TripStatus.completed
+      ).firstOrNull;
+
+      if (completedTrip != null) {
+        _showRatingScreen(completedTrip);
+      }
+    });
+    
     // Conectar al canal global de ubicaciones
     AntigravityClient().connect('drivers.locations');
+  }
+
+  void _showRatingScreen(Trip trip) {
+    // Almacenamos los datos necesarios antes de remover el viaje del store
+    final driverId = trip.driverId;
+    if (driverId == null) return;
+    
+    // Obtener nombre del conductor del store si está disponible, sino usar ID
+    final driverName = GravityStore().currentDrivers[driverId]?.id ?? "Conductor";
+
+    // Pequeño delay para permitir que la UI se asiente si es necesario
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RatingScreen(
+            tripId: trip.id,
+            ratedUserId: driverId,
+            ratedUserName: driverName,
+            ratedBy: 'passenger',
+          ),
+        ),
+      ).then((_) {
+        // Al regresar o cerrar la pantalla, limpiamos el viaje del store 
+        // para que no vuelva a dispararse el listener
+        GravityStore().removeTrip(trip.id);
+      });
+    });
   }
 
   void _initLocalMockDrivers() {
@@ -160,6 +204,7 @@ class _HomePassengerState extends State<HomePassenger> {
 
   @override
   void dispose() {
+    _tripSub?.cancel();
     _searchDebounce.close();
     _destinationController.dispose();
     _mockTrafficTimer?.cancel();
@@ -436,6 +481,25 @@ class _HomePassengerState extends State<HomePassenger> {
               _buildRoundIcon(Icons.work_outline),
               const SizedBox(width: 8),
               _buildRoundIcon(Icons.add),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const RatingScreen(
+                      tripId: 'test-trip-123',
+                      ratedUserId: 'driver-mock-123',
+                      ratedUserName: 'Carlos Méndez',
+                      ratedUserInitials: 'CM',
+                      origin: 'Palacio Municipal, Macuspana',
+                      destination: 'Hospital General, Macuspana',
+                      price: 85.00,
+                      ratedBy: 'passenger',
+                    ),
+                  ),
+                ),
+                child: const Text('⭐ Test', style: TextStyle(color: Colors.orange, fontSize: 12)),
+              ),
             ],
           ),
           const SizedBox(height: 24),

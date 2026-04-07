@@ -52,3 +52,13 @@ model NegotiationOffer {
   status        String   // pending, counter, accepted, rejected, cancelled
   createdAt     DateTime @default(now())
 }
+
+model Rating {
+  id          String   @id @default(uuid())
+  tripId      String
+  ratedBy     String   // passenger | driver
+  ratedUserId String   
+  rating      Int      
+  comment     String?  
+  createdAt   DateTime @default(now())
+}

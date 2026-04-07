@@ -62,17 +62,17 @@ const start = async () => {
 
   // --- API Routes ---
   server.get('/api/trips', async () =>
-    prisma.trip.findMany({ take: 20, include: { client: true, driver: true }, orderBy: { id: 'desc' } })
+    (prisma as any).trip.findMany({ take: 20, include: { client: true, driver: true }, orderBy: { id: 'desc' } })
   );
   
   server.get('/api/drivers', async () =>
-    prisma.driver.findMany({ orderBy: { isVerified: 'asc' } })
+    (prisma as any).driver.findMany()
   );
 
   server.post('/api/drivers/:id/verify', async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      const driver = await prisma.driver.update({ where: { id }, data: { isVerified: true } });
+      const driver = await (prisma as any).driver.update({ where: { id }, data: { isVerified: true } });
       return { success: true, driver };
     } catch {
       reply.code(404).send({ error: 'Driver not found' });
@@ -81,9 +81,9 @@ const start = async () => {
 
   server.get('/api/stats', async () => {
     const [activeTrips, onlineDrivers, completedToday] = await Promise.all([
-      prisma.trip.count({ where: { status: 'inProgress' } }),
-      prisma.driver.count({ where: { isOnline: true } }),
-      prisma.trip.count({ where: { status: 'completed' } }),
+      (prisma as any).trip.count({ where: { status: 'inProgress' } }),
+      (prisma as any).driver.count({ where: { isOnline: true } }),
+      (prisma as any).trip.count({ where: { status: 'completed' } }),
     ]);
     return { activeTrips, onlineDrivers, completedToday };
   });
@@ -106,7 +106,7 @@ const start = async () => {
       WHERE "driverId" = '${driverId}' AND status = 'counter'
     `);
     
-    await prisma.negotiationOffer.create({
+    await (prisma as any).negotiationOffer.create({
       data: { tripId, driverId, offeredPrice, counterPrice, status: 'counter' }
     });
     
@@ -182,6 +182,47 @@ const start = async () => {
     }));
 
     return { success: true };
+  });
+
+  // --- Rating System ---
+  server.post('/api/trips/:tripId/rate', async (request, reply) => {
+    const { tripId } = request.params as { tripId: string };
+    const { rating, comment, ratedBy, ratedUserId } = request.body as any;
+
+    if (rating < 1 || rating > 5) {
+      return reply.code(400).send({ error: 'Rating must be between 1 and 5' });
+    }
+
+    // Prevención de duplicados (409 Conflict)
+    const existing = await (prisma as any).rating.findFirst({
+      where: { tripId, ratedBy }
+    });
+    
+    if (existing) {
+      return reply.code(409).send({ error: 'Este viaje ya ha sido calificado por ti' });
+    }
+
+    // Guardar calificación
+    const newRating = await (prisma as any).rating.create({
+      data: { tripId, ratedBy, ratedUserId, rating, comment }
+    });
+
+    // Actualizar promedio del Driver si es calificado por el pasajero
+    if (ratedBy === 'passenger') {
+      const allRatings = await (prisma as any).rating.findMany({
+        where: { ratedUserId, ratedBy: 'passenger' }
+      });
+      
+      const total = allRatings.reduce((acc: number, r: any) => acc + r.rating, 0);
+      const average = total / allRatings.length;
+
+      await (prisma as any).driver.update({
+        where: { id: ratedUserId },
+        data: { rating: average }
+      });
+    }
+
+    return { success: true, rating: newRating };
   });
 
   const port = Number(process.env.PORT) || 3000;

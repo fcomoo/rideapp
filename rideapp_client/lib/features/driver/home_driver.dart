@@ -15,6 +15,7 @@ import 'package:rideapp_client/features/map/map_tracker_widget.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
 import 'package:rideapp_client/features/sos/sos_button.dart';
+import 'package:rideapp_client/features/rating/rating_screen.dart';
 
 class HomeDriver extends StatefulWidget {
   final String driverId;
@@ -30,6 +31,7 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
   late DriverSubscription _driverSubscription;
   final LocationBroadcastProtocol _broadcastProtocol = LocationBroadcastProtocol();
   StreamSubscription<Position>? _positionStream;
+  StreamSubscription? _tripSub;
   Timer? _simulationTimer;
   double _currentHeading = 0.0;
   
@@ -45,6 +47,18 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
     super.initState();
     _driverSubscription = DriverSubscription(widget.driverId);
     
+    // Listener para detectar viajes completados y mostrar pantalla de calificación
+    _tripSub = GravityStore().tripsStream.listen((trips) {
+      final completedTrip = trips.values.where((t) => 
+        t.driverId == widget.driverId && 
+        t.status == TripStatus.completed
+      ).firstOrNull;
+
+      if (completedTrip != null) {
+        _showRatingScreen(completedTrip);
+      }
+    });
+
     // Listen for requests on driver.{driverId}
     Antigravity.on('driver.${widget.driverId}.request', (data) {
       final trip = Trip.fromJson(data['trip']);
@@ -62,10 +76,34 @@ class _HomeDriverState extends State<HomeDriver> with SingleTickerProviderStateM
     }
   }
 
+  void _showRatingScreen(Trip trip) {
+    final clientId = trip.clientId;
+    
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => RatingScreen(
+            tripId: trip.id,
+            ratedUserId: clientId,
+            ratedUserName: "Pasajero",
+            ratedBy: 'driver',
+          ),
+        ),
+      ).then((_) {
+        GravityStore().removeTrip(trip.id);
+      });
+    });
+  }
+
   @override
   void dispose() {
     _stopBroadcasting();
     _driverSubscription.dispose();
+    _tripSub?.cancel();
+    _mapController.dispose();
     super.dispose();
   }
 
