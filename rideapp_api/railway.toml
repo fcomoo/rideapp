@@ -1,8 +1,0 @@
-[build]
-builder = "dockerfile"
-
-[deploy]
-startCommand = "npx prisma migrate deploy && npx tsx src/index.ts"
-healthcheckPath = "/health"
-healthcheckTimeout = 300
-restartPolicyType = "on_failure"
