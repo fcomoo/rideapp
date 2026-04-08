@@ -88,7 +88,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
         // 3. Macuspana Default
         LatLng lastPoint = _macuspanaDefault;
         if (polyPoints.isNotEmpty) {
-          lastPoint = polyPoints.last;
+          lastPoint = polyPoints.first;
         } else if (widget.defaultCenter != null && _isWithinMexico(widget.defaultCenter!)) {
           lastPoint = widget.defaultCenter!;
         }
@@ -103,7 +103,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
 
            // Notificación de Arribo
            if (!_arrivedNotified && polyPoints.length >= 2) {
-             final distance = _distanceCalculator.as(LengthUnit.Meter, polyPoints.first, lastPoint);
+             final distance = _distanceCalculator.as(LengthUnit.Meter, polyPoints.last, lastPoint);
              if (distance < 200) {
                _arrivedNotified = true;
                NotificationService().dispatchTripEvent('trip.arrived', {

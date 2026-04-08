@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { authRoutes } from './routes/auth';
 
 const execAsync = promisify(exec);
 dotenv.config();
@@ -34,6 +35,7 @@ const start = async () => {
   // 1. Configuración básica de Fastify
   await server.register(cors, { origin: '*' });
   await server.register(fastifyWebsocket);
+  await server.register(authRoutes);
 
   // --- Health Check (Resiliente) ---
   server.get('/health', async () => ({ 

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:rideapp_client/core/antigravity/client.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/protocols/trip_protocol.dart';
@@ -135,6 +136,41 @@ class _HomePassengerState extends State<HomePassenger> {
     });
   }
 
+  Future<SimpleLatLng> _getCurrentPosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return SimpleLatLng(_currentMapCenter.latitude, _currentMapCenter.longitude);
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return SimpleLatLng(_currentMapCenter.latitude, _currentMapCenter.longitude);
+      }
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      return SimpleLatLng(_currentMapCenter.latitude, _currentMapCenter.longitude);
+    }
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 3),
+      );
+      return SimpleLatLng(position.latitude, position.longitude);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usando ubicación del mapa (GPS lento)'), backgroundColor: Colors.orange)
+        );
+      }
+      return SimpleLatLng(_currentMapCenter.latitude, _currentMapCenter.longitude);
+    }
+  }
+
   Future<void> _selectDestination(SearchResult result) async {
     setState(() {
       _selectedDestination = result;
@@ -146,8 +182,8 @@ class _HomePassengerState extends State<HomePassenger> {
     
     _mapController.move(LatLng(result.coordinates.latitude, result.coordinates.longitude), 15);
     
-    // Usar la posición actual del mapa como origen del cálculo
-    final origin = SimpleLatLng(_currentMapCenter.latitude, _currentMapCenter.longitude); 
+    // Obtener la posición GPS real para el origen del cálculo
+    final origin = await _getCurrentPosition();
     
     try {
       final route = await RoutingService.getRoute(origin, result.coordinates);
