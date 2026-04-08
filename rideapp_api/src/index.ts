@@ -101,7 +101,7 @@ const start = async () => {
             );
           }
 
-          // Si es trip.requested, retransmitir al canal global de conductores
+          // Si es trip.requested, retransmitir al canal global que escuchan los conductores
           if (event === 'trip.requested') {
             await redisPub.publish(
               'trips.requests',

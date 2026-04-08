@@ -46,10 +46,14 @@ class _HomeDriverState extends State<HomeDriver> {
   }
 
   void _listenToRequests() {
-    // Escuchar el canal de solicitudes del conductor (vía Redis trips.requests retransmitido)
-    Antigravity.on('driver.${widget.driverId}.request', (data) {
+    // Escuchar el canal global de solicitudes (canal: trips.requests)
+    Antigravity.on('trip.requested', (data) {
       if (!_isOnline) return;
-      final trip = Trip.fromJson(data['trip']);
+      
+      // El payload contiene { event, channel, payload: { trip: {...} } }
+      // Antigravity._emitLocal ya extrajo el 'payload' interno
+      final tripData = data['trip'] ?? data;
+      final trip = Trip.fromJson(tripData);
       _showRequestBottomSheet(trip);
     });
 
@@ -256,6 +260,8 @@ class _HomeDriverState extends State<HomeDriver> {
               onChanged: (val) async {
                 setState(() => _isOnline = val);
                 if (val) {
+                  // Conectar al canal global de solicitudes
+                  AntigravityClient().connect('trips.requests');
                   await DriverLocationService().startTracking(widget.driverId);
                   Antigravity.emit('driver.online', {'driverId': widget.driverId});
                 } else {
