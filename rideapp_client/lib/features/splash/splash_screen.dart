@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:rideapp_client/core/services/auth_service.dart';
 import 'package:rideapp_client/features/auth/login_screen.dart';
+import 'package:rideapp_client/features/onboarding/onboarding_screen.dart';
+import 'package:rideapp_client/features/passenger/home_passenger.dart';
+import 'package:rideapp_client/features/driver/home_driver.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -31,23 +36,47 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     _controller.forward();
 
-    _navigateToLogin();
+    _initializeApp();
   }
 
-  Future<void> _navigateToLogin() async {
-    // Simulamos carga de servicios y garantizamos el "fresh start"
+  Future<void> _initializeApp() async {
+    // 1. Inicializar servicios principales
+    final authService = AuthService();
+    await authService.init();
+    
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+
+    // 2. Esperar al menos el tiempo de la animación
     await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 800),
-        ),
-      );
+
+    if (!mounted) return;
+
+    // 3. Determinar destino
+    Widget destination;
+    
+    if (!hasSeenOnboarding) {
+      destination = const OnboardingScreen();
+    } else if (authService.isLoggedIn() && authService.currentUser != null) {
+      final user = authService.currentUser!;
+      if (user['role'] == 'driver') {
+        destination = HomeDriver(driverId: user['id']);
+      } else {
+        destination = HomePassenger(currentUserId: user['id']);
+      }
+    } else {
+      destination = const LoginScreen();
     }
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => destination,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 800),
+      ),
+    );
   }
 
   @override
