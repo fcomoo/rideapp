@@ -14,6 +14,7 @@ import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/map/map_tracker_widget.dart';
+import 'package:rideapp_client/features/negotiation/negotiation_screen.dart';
 import 'package:rideapp_client/core/utils/geo_utils.dart';
 import 'package:rideapp_client/core/utils/mock_traffic.dart';
 import 'package:rideapp_client/features/chat/chat_screen.dart';
@@ -410,7 +411,7 @@ class _HomePassengerState extends State<HomePassenger> {
       status: TripStatus.requested, 
       route: finalRoute,
     );
-    
+
     TripRequestProtocol.requestTrip(
       trip: newTrip, 
       origin: finalRoute.first, 
@@ -420,6 +421,21 @@ class _HomePassengerState extends State<HomePassenger> {
         SnackBar(content: Text(msg), backgroundColor: Colors.red)
       )
     );
+
+    // Tras el requestTrip, navegamos a la pantalla de Negociación Activa
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NegotiationScreen(
+            tripId: newTrip.id,
+            clientId: widget.currentUserId,
+            origin: {'lat': finalRoute.first.latitude, 'lng': finalRoute.first.longitude},
+            destination: {'lat': finalRoute.last.latitude, 'lng': finalRoute.last.longitude},
+          ),
+        ),
+      );
+    }
   }
 
   void _handleCancelTrip(Trip trip) => Antigravity.mutateTrip(currentTrip: trip, nextTrip: trip.copyWith(status: TripStatus.cancelled), onCommit: (t) => Antigravity.emit('trip.cancelled', {'tripId': t.id}), onRollback: (_) => print('Rollback'));

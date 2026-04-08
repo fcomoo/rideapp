@@ -1,21 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:rideapp_client/core/protocols/negotiation_protocol.dart';
-import 'package:rideapp_client/domain/entities/negotiation_offer.dart';
+import 'package:rideapp_client/domain/entities/trip.dart';
 
 class DriverOfferScreen extends StatefulWidget {
-  final String tripId;
+  final Trip trip;
   final String driverId;
-  final double passengerOfferedPrice;
-  final Map<String, double> origin;
-  final Map<String, double> destination;
+  final double suggestedPrice;
 
   const DriverOfferScreen({
     super.key,
-    required this.tripId,
+    required this.trip,
     required this.driverId,
-    required this.passengerOfferedPrice,
-    required this.origin,
-    required this.destination,
+    required this.suggestedPrice,
   });
 
   @override
@@ -24,37 +20,36 @@ class DriverOfferScreen extends StatefulWidget {
 
 class _DriverOfferScreenState extends State<DriverOfferScreen> {
   final TextEditingController _counterController = TextEditingController();
+  double _priceBuffer = 0.0;
   bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
-    _counterController.text = (widget.passengerOfferedPrice + 15).toString(); // Sugerencia de +15
+    _priceBuffer = widget.suggestedPrice;
+    _counterController.text = widget.suggestedPrice.toString();
   }
 
   Future<void> _acceptDirectly() async {
     setState(() => _isSending = true);
     await NegotiationProtocol.counterOffer(
-      tripId: widget.tripId,
+      tripId: widget.trip.id,
       driverId: widget.driverId,
-      counterPrice: widget.passengerOfferedPrice,
-      offeredPrice: widget.passengerOfferedPrice,
+      counterPrice: widget.suggestedPrice,
+      offeredPrice: widget.suggestedPrice,
     );
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> _sendCounter() async {
-    final price = double.tryParse(_counterController.text);
-    if (price == null) return;
-    
     setState(() => _isSending = true);
     await NegotiationProtocol.counterOffer(
-      tripId: widget.tripId,
+      tripId: widget.trip.id,
       driverId: widget.driverId,
-      counterPrice: price,
-      offeredPrice: widget.passengerOfferedPrice,
+      counterPrice: _priceBuffer,
+      offeredPrice: widget.suggestedPrice,
     );
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
@@ -75,17 +70,12 @@ class _DriverOfferScreenState extends State<DriverOfferScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('OFERTA DEL PASAJERO', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                  Text('\$85.00', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const Text('OFERTA DEL PASAJERO', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  Text('\$${widget.suggestedPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
                 ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(color: const Color(0xFFFF6B00).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: const Text('2.4 KM', style: TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -123,19 +113,20 @@ class _DriverOfferScreenState extends State<DriverOfferScreen> {
         const Divider(color: Colors.white10, height: 32),
         const Text('O PROPÓN UN MEJOR PRECIO:', style: TextStyle(color: Colors.white30, fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
+        Slider(
+          value: _priceBuffer,
+          min: widget.suggestedPrice,
+          max: widget.suggestedPrice + 100.0,
+          activeColor: const Color(0xFFFF6B00),
+          onChanged: (val) => setState(() => _priceBuffer = val),
+        ),
         Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _counterController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                decoration: const InputDecoration(
-                  prefixText: '\$',
-                  filled: true,
-                  fillColor: Colors.black26,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide.none),
-                ),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12)),
+                child: Text('\$${_priceBuffer.toStringAsFixed(2)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ),
             const SizedBox(width: 12),

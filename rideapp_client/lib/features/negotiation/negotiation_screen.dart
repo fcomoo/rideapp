@@ -4,7 +4,6 @@ import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/antigravity/profile.dart';
 import 'package:rideapp_client/core/protocols/negotiation_protocol.dart';
 import 'package:rideapp_client/domain/entities/negotiation_offer.dart';
-import 'package:rideapp_client/core/antigravity/kill_switch.dart';
 
 class NegotiationScreen extends StatefulWidget {
   final String tripId;
@@ -64,7 +63,6 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
   }
 
   void _handleTimeout() {
-    KillSwitch.trigger();
     GravityStore().clearOffers();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,6 +106,15 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white54),
+            onPressed: () {
+              GravityStore().clearOffers();
+              Navigator.pop(context);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),

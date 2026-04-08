@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { authRoutes } from './routes/auth';
+import { negotiateRoutes } from './routes/negotiate';
 
 const execAsync = promisify(exec);
 dotenv.config();
@@ -36,6 +37,7 @@ const start = async () => {
   await server.register(cors, { origin: '*' });
   await server.register(fastifyWebsocket);
   await server.register(authRoutes);
+  await server.register(negotiateRoutes);
 
   // --- Health Check (Resiliente) ---
   server.get('/health', async () => ({ 
