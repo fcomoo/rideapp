@@ -96,6 +96,7 @@ class _HomePassengerState extends State<HomePassenger> {
   }
 
   void _initLocalMockDrivers() {
+    if (GravityStore().currentDrivers.isNotEmpty) return;
     _localMockDrivers.addAll([
       Driver(id: 'mock-driver-1', vehicleDetails: {'model': 'Toyota Corolla'}, currentLocation: const Coordinates(17.7650, -92.5900), rating: 4.8),
       Driver(id: 'mock-driver-2', vehicleDetails: {'model': 'Nissan Versa'}, currentLocation: const Coordinates(17.7580, -92.5850), rating: 4.9),
@@ -106,6 +107,13 @@ class _HomePassengerState extends State<HomePassenger> {
   void _startLocalMockTraffic() {
     _mockTrafficTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
+      if (GravityStore().currentDrivers.isNotEmpty) {
+        if (_localMockDrivers.isNotEmpty) {
+          setState(() => _localMockDrivers.clear());
+        }
+        return;
+      }
+      
       _tick++;
       setState(() {
         if (_tick % 2 == 0) {

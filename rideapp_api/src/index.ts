@@ -76,8 +76,27 @@ const start = async () => {
           return;
         }
         const { event, channel, payload } = validated.data;
+
         if (redisReady && redisPub) {
+          // Publicar en el canal original
           await redisPub.publish(channel, JSON.stringify({ event, channel, payload }));
+
+          // Si es ubicación de conductor, retransmitir al canal global
+          // que escuchan todos los pasajeros
+          if (event === 'driver.location') {
+            await redisPub.publish(
+              'drivers.locations',
+              JSON.stringify({ event, channel: 'drivers.locations', payload })
+            );
+          }
+
+          // Si es trip.requested, retransmitir al canal global de conductores
+          if (event === 'trip.requested') {
+            await redisPub.publish(
+              'trips.requests',
+              JSON.stringify({ event, channel: 'trips.requests', payload })
+            );
+          }
         }
       } catch (err) {
         console.error('[WS] Error:', err);
