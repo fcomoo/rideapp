@@ -4,9 +4,9 @@
   "description": "RideApp Backend with Fastify, Redis and Prisma",
   "main": "dist/index.js",
   "scripts": {
-    "start": "npx prisma migrate deploy && npx tsx src/index.ts",
-    "dev": "ts-node-dev --respawn src/index.ts",
     "build": "tsc",
+    "start": "npx prisma migrate deploy && node dist/index.js",
+    "dev": "ts-node-dev --respawn src/index.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
