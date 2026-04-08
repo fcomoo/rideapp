@@ -7,6 +7,7 @@ import 'package:rideapp_client/core/subscriptions/trip_subscription.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/core/services/notification_service.dart';
+import 'package:rideapp_client/core/config/app_config.dart';
 
 class MapTrackerWidget extends StatefulWidget {
   final String tripId;
@@ -30,9 +31,6 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
   DateTime? _lastEmitTime;
   Trip? _initialState;
   bool _arrivedNotified = false;
-
-  // Macuspana Fallback absoluto
-  static const LatLng _macuspanaDefault = LatLng(17.7600, -92.5950);
 
   @override
   void initState() {
@@ -86,7 +84,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
         // 1. Fin de ruta actual
         // 2. Parámetro heredado del Home
         // 3. Macuspana Default
-        LatLng lastPoint = _macuspanaDefault;
+        LatLng lastPoint = AppConfig.macuspanaCenter;
         if (polyPoints.isNotEmpty) {
           lastPoint = polyPoints.first;
         } else if (widget.defaultCenter != null && _isWithinMexico(widget.defaultCenter!)) {

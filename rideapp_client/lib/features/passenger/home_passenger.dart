@@ -20,6 +20,7 @@ import 'package:rideapp_client/features/chat/chat_screen.dart';
 import 'package:rideapp_client/features/sos/sos_button.dart';
 import 'package:rideapp_client/features/rating/rating_screen.dart';
 import 'package:rideapp_client/features/profile/passenger_profile_screen.dart';
+import 'package:rideapp_client/core/config/app_config.dart';
 
 class HomePassenger extends StatefulWidget {
   final String currentUserId;
@@ -183,7 +184,12 @@ class _HomePassengerState extends State<HomePassenger> {
     _mapController.move(LatLng(result.coordinates.latitude, result.coordinates.longitude), 15);
     
     // Obtener la posición GPS real para el origen del cálculo
-    final origin = await _getCurrentPosition();
+    SimpleLatLng origin = await _getCurrentPosition();
+    
+    // VALIDACIÓN: Si estamos fuera de México (ej. simulador en SF), forzar Macuspana
+    if (!GeoUtils.isWithinMexico(origin.latitude, origin.longitude)) {
+      origin = SimpleLatLng(AppConfig.macuspanaCenter.latitude, AppConfig.macuspanaCenter.longitude);
+    }
     
     try {
       final route = await RoutingService.getRoute(origin, result.coordinates);
@@ -244,7 +250,7 @@ class _HomePassengerState extends State<HomePassenger> {
   }
 
   Widget _buildMainContent(Trip? activeTrip) {
-    if (activeTrip != null) return MapTrackerWidget(tripId: activeTrip.id, defaultCenter: _currentMapCenter);
+    if (activeTrip != null) return MapTrackerWidget(tripId: activeTrip.id, defaultCenter: AppConfig.macuspanaCenter);
     
     return FlutterMap(
       mapController: _mapController,
@@ -253,7 +259,7 @@ class _HomePassengerState extends State<HomePassenger> {
         initialZoom: 15.0,
         backgroundColor: Colors.grey[200]!,
         onPositionChanged: (position, hasGesture) {
-          if (position.center != null) _currentMapCenter = position.center;
+          _currentMapCenter = position.center;
         },
       ),
       children: [
@@ -392,8 +398,28 @@ class _HomePassengerState extends State<HomePassenger> {
       return;
     }
 
-    final newTrip = Trip(id: 'trip-${DateTime.now().millisecondsSinceEpoch}', clientId: widget.currentUserId, status: TripStatus.requested, route: _previewRoute);
-    TripRequestProtocol.requestTrip(trip: newTrip, origin: _previewRoute.first, destination: _previewRoute.last, offeredPrice: 25.0, onError: (msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red)));
+    // Asegurar que el origen del Trip sea válido en México (evitar SF)
+    List<Coordinates> finalRoute = List.from(_previewRoute);
+    if (!GeoUtils.isWithinMexico(finalRoute.first.latitude, finalRoute.first.longitude)) {
+      finalRoute[0] = Coordinates(AppConfig.macuspanaCenter.latitude, AppConfig.macuspanaCenter.longitude);
+    }
+
+    final newTrip = Trip(
+      id: 'trip-${DateTime.now().millisecondsSinceEpoch}', 
+      clientId: widget.currentUserId, 
+      status: TripStatus.requested, 
+      route: finalRoute,
+    );
+    
+    TripRequestProtocol.requestTrip(
+      trip: newTrip, 
+      origin: finalRoute.first, 
+      destination: finalRoute.last, 
+      offeredPrice: 25.0, 
+      onError: (msg) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red)
+      )
+    );
   }
 
   void _handleCancelTrip(Trip trip) => Antigravity.mutateTrip(currentTrip: trip, nextTrip: trip.copyWith(status: TripStatus.cancelled), onCommit: (t) => Antigravity.emit('trip.cancelled', {'tripId': t.id}), onRollback: (_) => print('Rollback'));

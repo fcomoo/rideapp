@@ -53,6 +53,10 @@ class GeoUtils {
     return (radians * 180 / pi + 360) % 360;
   }
 
+  static bool isWithinMexico(double lat, double lng) {
+    return lat >= 14.0 && lat <= 33.0 && lng >= -118.0 && lng <= -86.0;
+  }
+
   static double _toRadians(double degree) {
     return degree * pi / 180;
   }
