@@ -12,6 +12,8 @@ import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/negotiation/driver_offer_screen.dart';
 import 'package:rideapp_client/features/rating/rating_screen.dart';
+import 'package:rideapp_client/features/profile/driver_profile_screen.dart';
+import 'package:rideapp_client/core/services/auth_service.dart';
 
 class HomeDriver extends StatefulWidget {
   final String driverId;
@@ -204,7 +206,29 @@ class _HomeDriverState extends State<HomeDriver> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('PANEL CONDUCTOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
+                Row(
+                  children: [
+                    const Text('PANEL CONDUCTOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.person_rounded, color: Color(0xFFFF6B00), size: 24),
+                      onPressed: () {
+                        final user = AuthService().currentUser;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DriverProfileScreen(
+                              driverId: widget.driverId,
+                              name: user?['name'],
+                              email: user?['email'],
+                              phone: user?['phone'],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
