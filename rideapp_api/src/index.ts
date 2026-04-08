@@ -4,7 +4,6 @@ import cors from '@fastify/cors';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
-import { redisPub, redisSub } from './redis/pub-sub';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
@@ -13,6 +12,8 @@ dotenv.config();
 // Estados de conexión para Healthcheck
 let dbReady = false;
 let redisReady = false;
+let redisPub: any = null;
+let redisSub: any = null;
 
 const prisma = new PrismaClient();
 const server = Fastify();
@@ -24,8 +25,10 @@ const MessageSchema = z.object({
 });
 
 const start = async () => {
+  console.log('[BOOT] Starting RideApp API - Macuspana...');
+
   // 1. Configuración básica de Fastify
-  await server.register(cors, { origin: '*' }); // Simplificado para Railway
+  await server.register(cors, { origin: '*' });
   await server.register(fastifyWebsocket);
 
   // --- Health Check (Resiliente) ---
@@ -47,15 +50,14 @@ const start = async () => {
     }
     console.log(`[WS] Client connected: ${subscriptionChannel}`);
     
-    if (redisReady) {
-      redisSub.subscribe(subscriptionChannel);
-    }
-
     const redisMessageListener = (chan: string, message: string) => {
       if (chan === subscriptionChannel) connection.socket.send(message);
     };
-    
-    redisSub.on('message', redisMessageListener);
+
+    if (redisReady && redisSub) {
+      redisSub.subscribe(subscriptionChannel);
+      redisSub.on('message', redisMessageListener);
+    }
     
     connection.socket.on('message', async (rawData: Buffer | string) => {
       try {
@@ -66,8 +68,7 @@ const start = async () => {
           return;
         }
         const { event, channel, payload } = validated.data;
-        console.log(`[WS] Received [${event}] on [${channel}]`);
-        if (redisReady) {
+        if (redisReady && redisPub) {
           await redisPub.publish(channel, JSON.stringify({ event, channel, payload }));
         }
       } catch (err) {
@@ -76,10 +77,11 @@ const start = async () => {
     });
 
     connection.socket.on('close', () => {
-      console.log(`[WS] Disconnected: ${subscriptionChannel}`);
-      redisSub.removeListener('message', redisMessageListener);
-      if (redisSub.listenerCount('message') === 0 && redisReady) {
-        redisSub.unsubscribe(subscriptionChannel);
+      if (redisReady && redisSub) {
+        redisSub.removeListener('message', redisMessageListener);
+        if (redisSub.listenerCount('message') === 0) {
+          redisSub.unsubscribe(subscriptionChannel);
+        }
       }
     });
   });
@@ -102,7 +104,6 @@ const start = async () => {
   server.post('/api/auth/register', async (request, reply) => {
     const { name, email, password, role, phone } = request.body as any;
     if (role === 'driver' && !phone) return reply.code(400).send({ error: 'Phone required' });
-
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const user = await (prisma as any).user.create({
@@ -127,50 +128,43 @@ const start = async () => {
 
   // --- API Routes ---
   server.get('/api/trips', async () => (prisma as any).trip.findMany({ take: 20, include: { client: true, driver: true }, orderBy: { id: 'desc' } }));
-  server.get('/api/stats', async () => {
-    if (!dbReady) return { error: 'Database connecting' };
-    const [activeTrips, onlineDrivers, completedToday] = await Promise.all([
-      (prisma as any).trip.count({ where: { status: 'inProgress' } }),
-      (prisma as any).driver.count({ where: { isOnline: true } }),
-      (prisma as any).trip.count({ where: { status: 'completed' } }),
-    ]);
-    return { activeTrips, onlineDrivers, completedToday };
-  });
 
   // 2. AMARRE INMEDIATO DE PUERTO (Eager Port Binding)
   const port = Number(process.env.PORT) || 3000;
   try {
+    console.log(`[BOOT] Attempting port bind on ${port}...`);
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`[RideApp API] Eager port bind successful on port ${port}`);
+    console.log(`[BOOT] RideApp API SUCCESS: Listening on port ${port}`);
   } catch (err) {
     console.error('[CRITICAL] Port bind failed:', err);
     process.exit(1);
   }
 
-  // 3. Conexión asíncrona a servicios pesados (Post-Bind)
+  // 3. LAZY LOADING de servicios pesados (Post-Bind)
   (async () => {
     try {
       console.log('[BOOT] Connecting to Database...');
       await prisma.$connect();
       dbReady = true;
-      console.log('[BOOT] Database connected successfully.');
+      console.log('[BOOT] Database connected.');
     } catch (err) {
-      console.error('[BOOT] Database connection failed:', err);
+      console.error('[BOOT] Database failed:', err.message);
     }
 
     try {
-      console.log('[BOOT] Connecting to Redis...');
-      // redisPub y redisSub ya iniciaron su conexión al ser importados, 
-      // solo esperamos un pequeño delay o verificamos status
+      console.log('[BOOT] Lazy loading Redis modules...');
+      const redisModule = await import('./redis/pub-sub');
+      redisPub = redisModule.redisPub;
+      redisSub = redisModule.redisSub;
       redisReady = true;
-      console.log('[BOOT] Redis bus initialized.');
+      console.log('[BOOT] Redis initialized successfully.');
     } catch (err) {
-      console.error('[BOOT] Redis initialization failed:', err);
+      console.error('[BOOT] Redis lazy load failed:', err.message);
     }
   })();
 };
 
 start().catch((err) => {
-  console.error('[CRITICAL] Startup crash:', err);
+  console.error('[CRITICAL] Global startup crash:', err);
   process.exit(1);
 });
