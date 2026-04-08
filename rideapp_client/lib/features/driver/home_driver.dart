@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:rideapp_client/core/antigravity/client.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
+import 'package:rideapp_client/core/config/app_config.dart';
+import 'package:rideapp_client/core/services/driver_location_service.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/entities/driver.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
 import 'package:rideapp_client/features/negotiation/driver_offer_screen.dart';
-import 'package:rideapp_client/core/services/driver_location_service.dart';
 import 'package:rideapp_client/features/rating/rating_screen.dart';
 
 class HomeDriver extends StatefulWidget {
@@ -19,27 +22,29 @@ class HomeDriver extends StatefulWidget {
 }
 
 class _HomeDriverState extends State<HomeDriver> {
+  final MapController _mapController = MapController();
   bool _isOnline = false;
   StreamSubscription? _statusSub;
+  LatLng _lastKnownCenter = AppConfig.macuspanaCenter;
 
   @override
   void initState() {
     super.initState();
     _listenToRequests();
     
-    // Inicializar estado local en el GravityStore
+    // Inicializar estado local en el GravityStore si no existe
     if (GravityStore().currentDrivers[widget.driverId] == null) {
       GravityStore().updateDriver(Driver(
         id: widget.driverId,
         vehicleDetails: {'model': 'Tesla Model 3', 'plate': 'AG-2026'},
-        currentLocation: Coordinates(17.7600, -92.5950),
+        currentLocation: Coordinates(AppConfig.macuspanaCenter.latitude, AppConfig.macuspanaCenter.longitude),
         rating: 4.9,
       ));
     }
   }
 
   void _listenToRequests() {
-    // Escuchar el canal de solicitudes del conductor
+    // Escuchar el canal de solicitudes del conductor (vía Redis trips.requests retransmitido)
     Antigravity.on('driver.${widget.driverId}.request', (data) {
       if (!_isOnline) return;
       final trip = Trip.fromJson(data['trip']);
@@ -60,19 +65,20 @@ class _HomeDriverState extends State<HomeDriver> {
   }
 
   void _showRequestBottomSheet(Trip trip) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DriverOfferScreen(
-          trip: trip, 
-          driverId: widget.driverId,
-          suggestedPrice: (trip as dynamic).offeredPrice ?? 35.0,
-        ),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DriverOfferScreen(
+        trip: trip, 
+        driverId: widget.driverId,
+        suggestedPrice: (trip as dynamic).offeredPrice ?? 35.0,
       ),
     );
   }
 
   void _showRatingScreen(Trip trip) {
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -90,6 +96,7 @@ class _HomeDriverState extends State<HomeDriver> {
   void dispose() {
     DriverLocationService().stopTracking();
     _statusSub?.cancel();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -97,69 +104,200 @@ class _HomeDriverState extends State<HomeDriver> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        title: const Text('PANEL CONDUCTOR', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          Switch(
-            value: _isOnline,
-            onChanged: (val) async {
-              setState(() => _isOnline = val);
-              if (val) {
-                await DriverLocationService().startTracking(widget.driverId);
-                Antigravity.emit('driver.online', {'driverId': widget.driverId});
-              } else {
-                DriverLocationService().stopTracking();
-                Antigravity.emit('driver.offline', {'driverId': widget.driverId});
-              }
+      body: Stack(
+        children: [
+          // 1. MAPA PRINCIPAL
+          StreamBuilder<Position>(
+            stream: Geolocator.getPositionStream(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 5,
+              ),
+            ),
+            builder: (context, snapshot) {
+              final pos = snapshot.hasData 
+                  ? LatLng(snapshot.data!.latitude, snapshot.data!.longitude)
+                  : _lastKnownCenter;
+              
+              _lastKnownCenter = pos;
+
+              return FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: pos,
+                  initialZoom: 15.0,
+                  backgroundColor: const Color(0xFF121212),
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.rideapp.client',
+                    tileBuilder: (context, tileWidget, tile) {
+                      return ColorFiltered(
+                        colorFilter: const ColorFilter.matrix([
+                          -1, 0, 0, 0, 255,
+                          0, -1, 0, 0, 255,
+                          0, 0, -1, 0, 255,
+                          0, 0, 0, 1, 0,
+                        ]),
+                        child: tileWidget,
+                      );
+                    },
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: pos,
+                        width: 60,
+                        height: 60,
+                        child: _buildDriverMarker(),
+                      ),
+                    ],
+                  ),
+                ],
+              );
             },
-            activeColor: const Color(0xFFFF6B00),
           ),
+
+          // 2. OVERLAY SUPERIOR (AppBar)
+          _buildTopOverlay(),
+
+          // 3. OVERLAY INFERIOR (Estado)
+          _buildBottomOverlay(),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    );
+  }
+
+  Widget _buildDriverMarker() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF6B00),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+          ),
+          child: const Text('TÚ', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+        ),
+        const Icon(Icons.directions_car, color: Color(0xFFFF6B00), size: 40),
+      ],
+    );
+  }
+
+  Widget _buildTopOverlay() {
+    return Positioned(
+      top: 0, left: 0, right: 0,
+      child: Container(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, left: 20, right: 20, bottom: 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black87, Colors.transparent],
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(
-              _isOnline ? Icons.online_prediction : Icons.offline_bolt,
-              size: 100,
-              color: _isOnline ? Colors.green : Colors.red,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('PANEL CONDUCTOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 18)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Container(
+                      width: 8, height: 8,
+                      decoration: BoxDecoration(
+                        color: _isOnline ? Colors.green : Colors.red,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: (_isOnline ? Colors.green : Colors.red).withOpacity(0.5), blurRadius: 4, spreadRadius: 2)
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isOnline ? 'EN LÍNEA' : 'FUERA DE LÍNEA',
+                      style: TextStyle(color: _isOnline ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-            Text(
-              _isOnline ? 'ESTÁS EN LÍNEA' : 'ESTÁS FUERA DE LÍNEA',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+            Switch(
+              value: _isOnline,
+              onChanged: (val) async {
+                setState(() => _isOnline = val);
+                if (val) {
+                  await DriverLocationService().startTracking(widget.driverId);
+                  Antigravity.emit('driver.online', {'driverId': widget.driverId});
+                } else {
+                  DriverLocationService().stopTracking();
+                  Antigravity.emit('driver.offline', {'driverId': widget.driverId});
+                }
+              },
+              activeColor: const Color(0xFFFF6B00),
             ),
-            const SizedBox(height: 8),
-            Text(
-              _isOnline ? 'Esperando solicitudes de viaje...' : 'Conéctate para recibir viajes',
-              style: TextStyle(color: Colors.white.withOpacity(0.5)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomOverlay() {
+    return Positioned(
+      bottom: 40, left: 20, right: 20,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1C),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 20, offset: Offset(0, 10))],
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _isOnline ? Icons.radar : Icons.power_settings_new,
+                  color: _isOnline ? const Color(0xFFFF6B00) : Colors.white24,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isOnline ? 'ESPERANDO SOLICITUDES...' : 'MODO DESCONECTADO',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _isOnline ? 'Buscando pasajeros en Macuspana' : 'Activa el switch para recibir viajes',
+                        style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isOnline)
+                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6B00))),
+              ],
             ),
             if (_isOnline) ...[
-              const SizedBox(height: 48),
-              const Text(
-                'COMPARTIENDO UBICACIÓN EN TIEMPO REAL',
-                style: TextStyle(color: Color(0xFFFF6B00), fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1),
-              ),
-              const SizedBox(height: 16),
+              const Divider(color: Colors.white10, height: 32),
               StreamBuilder<Position>(
-                stream: Geolocator.getPositionStream(
-                  locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10)
-                ),
+                stream: Geolocator.getPositionStream(),
                 builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
-                      child: Text(
-                        'LAT: ${snapshot.data!.latitude.toStringAsFixed(6)} | LNG: ${snapshot.data!.longitude.toStringAsFixed(6)}',
-                        style: const TextStyle(color: Colors.white60, fontSize: 12, fontFamily: 'monospace'),
-                      ),
-                    );
-                  }
-                  return const SizedBox();
+                  final lat = snapshot.data?.latitude.toStringAsFixed(6) ?? '--';
+                  final lng = snapshot.data?.longitude.toStringAsFixed(6) ?? '--';
+                  return Text(
+                    'GPS: $lat, $lng',
+                    style: const TextStyle(color: Colors.white24, fontSize: 10, fontFamily: 'monospace'),
+                  );
                 },
               ),
             ],
