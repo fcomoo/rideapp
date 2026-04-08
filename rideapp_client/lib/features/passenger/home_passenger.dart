@@ -303,6 +303,7 @@ class _HomePassengerState extends State<HomePassenger> {
               context,
               MaterialPageRoute(
                 builder: (_) => PassengerProfileScreen(
+                  userId: user?['id'] ?? widget.currentUserId,
                   name: user?['name'],
                   email: user?['email'],
                   phone: user?['phone'],

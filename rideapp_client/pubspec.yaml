@@ -21,6 +21,7 @@ dependencies:
   flutter_local_notifications: ^17.0.0
   flutter_secure_storage: ^9.0.0
   shared_preferences: ^2.5.2
+  image_picker: ^1.2.1
 
 dependency_overrides:
   latlong2:

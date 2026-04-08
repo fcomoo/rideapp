@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["debian-openssl-3.0.x"]
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -16,6 +16,7 @@ model User {
   phone    String? 
   role     String // client, driver
   status   String // idle, searching, on_trip
+  avatarUrl String?
   trips    Trip[] @relation("ClientTrips")
 }
 

@@ -218,7 +218,7 @@ class _HomeDriverState extends State<HomeDriver> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => DriverProfileScreen(
-                              driverId: widget.driverId,
+                              userId: user?['id'] ?? widget.driverId,
                               name: user?['name'],
                               email: user?['email'],
                               phone: user?['phone'],

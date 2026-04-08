@@ -10,6 +10,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { authRoutes } from './routes/auth';
 import { negotiateRoutes } from './routes/negotiate';
+import { uploadRoutes } from './routes/upload';
+import fastifyStatic from '@fastify/static';
+import fastifyMultipart from '@fastify/multipart';
+import { join } from 'path';
 
 const execAsync = promisify(exec);
 dotenv.config();
@@ -38,6 +42,13 @@ const start = async () => {
   await server.register(fastifyWebsocket);
   await server.register(authRoutes);
   await server.register(negotiateRoutes);
+  await server.register(uploadRoutes);
+
+  await server.register(fastifyMultipart);
+  await server.register(fastifyStatic, {
+    root: join(process.cwd(), 'uploads'),
+    prefix: '/uploads/',
+  });
 
   // --- Health Check (Resiliente) ---
   server.get('/health', async () => ({ 
