@@ -9,3 +9,4 @@ RUN npx prisma generate
 COPY . .
 EXPOSE 3000
 CMD ["npm", "start"]
+ARG CACHE_BUST=1775671054
