@@ -139,19 +139,8 @@ const start = async () => {
     process.exit(1);
   }
 
-  // 3. Tareas asíncronas post-arranque (Migraciones + Servicios)
+  // 3. Tareas asíncronas post-arranque (Servicios)
   (async () => {
-    try {
-      console.log('[BOOT] Starting database migrations...');
-      const { stdout, stderr } = await execAsync('npx prisma migrate deploy');
-      console.log('[BOOT] Migrations output:', stdout);
-      if (stderr) console.warn('[BOOT] Migrations stderr:', stderr);
-      migrationReady = true;
-      console.log('[BOOT] Migrations completed successfully.');
-    } catch (err: any) {
-      console.error('[BOOT] Migrations failed:', err.message);
-    }
-
     try {
       console.log('[BOOT] Connecting to Database client...');
       await prisma.$connect();
