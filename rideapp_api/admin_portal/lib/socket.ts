@@ -12,11 +12,16 @@ export function useAntigravityBridge(channel: string, onMessage: (msg: Message) 
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    let isUnmounted = false;
+
     const connect = () => {
+      if (isUnmounted) return;
+      
       console.log(`[Admin] Connecting to Antigravity Bridge: ${channel}`);
       ws.current = new WebSocket(`ws://localhost:3000/ws?channel=${channel}`);
 
       ws.current.onmessage = (event) => {
+        if (isUnmounted) return;
         try {
           const data = JSON.parse(event.data);
           onMessage(data);
@@ -26,20 +31,30 @@ export function useAntigravityBridge(channel: string, onMessage: (msg: Message) 
       };
 
       ws.current.onclose = () => {
+        if (isUnmounted) {
+          console.log(`[Admin] WS Cleaned up for channel: ${channel}`);
+          return;
+        }
         console.log('[Admin] WS Disconnected. Retrying in 5s...');
         setTimeout(connect, 5000);
       };
 
       ws.current.onerror = (err) => {
         console.error('[Admin] WS Error:', err);
-        ws.current?.close();
+        if (!isUnmounted) {
+          ws.current?.close();
+        }
       };
     };
 
     connect();
 
     return () => {
-      ws.current?.close();
+      isUnmounted = true;
+      if (ws.current) {
+        // Al cerrar manualmente, evitamos que el onclose dispare la reconexión
+        ws.current.close();
+      }
     };
   }, [channel, onMessage]);
 

@@ -5,7 +5,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:rideapp_client/core/antigravity/client.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
-import 'package:rideapp_client/core/antigravity/profile.dart';
 import 'package:rideapp_client/core/protocols/trip_protocol.dart';
 import 'package:rideapp_client/core/services/geocoding_service.dart';
 import 'package:rideapp_client/core/services/routing_service.dart';
@@ -218,7 +217,7 @@ class _HomePassengerState extends State<HomePassenger> {
         initialZoom: 15.0,
         backgroundColor: Colors.grey[200]!,
         onPositionChanged: (position, hasGesture) {
-          if (position.center != null) _currentMapCenter = position.center!;
+          if (position.center != null) _currentMapCenter = position.center;
         },
       ),
       children: [

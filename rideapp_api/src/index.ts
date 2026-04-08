@@ -132,10 +132,28 @@ const start = async () => {
       const redisModule = await import('./redis/pub-sub');
       redisPub = redisModule.redisPub;
       redisSub = redisModule.redisSub;
-      redisReady = true;
-      console.log('[BOOT] Redis initialized.');
+      
+      // Fix memory leak: Increase max listeners and ensure it persists
+      redisSub.setMaxListeners(50);
+      
+      // Intentar conexión si es una instancia real de ioredis
+      if (!(redisSub instanceof (await import('events')).EventEmitter)) {
+          // No es un Mock (es ioredis real), configurar eventos de reconexión
+          redisSub.on('connect', () => {
+             redisSub.setMaxListeners(50);
+             redisReady = true;
+             console.log('[REDIS] Connected and MaxListeners set to 50');
+          });
+      } else {
+          // Es un Mock (Offline Mode)
+          console.log('[REDIS] Running in offline mode (Mock). REST API remains fully operational.');
+          redisReady = false; 
+      }
+
+      console.log('[BOOT] Redis phase completed.');
     } catch (err: any) {
-      console.error('[BOOT] Redis failed:', err.message);
+      console.error('[BOOT] Redis critical failure (Offline Mode activated):', err.message);
+      redisReady = false; // El servidor sigue vivo gracias al try/catch
     }
   })();
 };
