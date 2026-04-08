@@ -53,13 +53,19 @@ class _HomeDriverState extends State<HomeDriver> {
     Antigravity.on('trip.requested', (data) {
       if (!_isOnline) return;
       try {
-        // Antigravity._emitLocal ya extrajo el 'payload' interno
-        final tripData = data['trip'] ?? data;
-        final trip = Trip.fromJson(tripData);
+        // El eventController local de Antigravity entrega { 'event': ..., 'payload': ... }
+        final tripData = data['payload'] ?? data;
+        print('Driver received trip request: $tripData');
+        
+        // Si el payload viene envuelto en una llave 'trip' dentro del payload de red
+        final finalData = (tripData is Map && tripData.containsKey('trip')) ? tripData['trip'] : tripData;
+        
+        final trip = Trip.fromJson(finalData);
         if (!mounted) return;
         _showRequestBottomSheet(trip);
       } catch (e) {
         print('Error parsing trip request: $e');
+        print('Raw data received: $data');
       }
     });
 
