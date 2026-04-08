@@ -6,13 +6,17 @@ import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/subscriptions/trip_subscription.dart';
 import 'package:rideapp_client/domain/entities/trip.dart';
 import 'package:rideapp_client/domain/value_objects/coordinates.dart';
-
 import 'package:rideapp_client/core/services/notification_service.dart';
 
 class MapTrackerWidget extends StatefulWidget {
   final String tripId;
+  final LatLng? defaultCenter;
 
-  const MapTrackerWidget({super.key, required this.tripId});
+  const MapTrackerWidget({
+    super.key, 
+    required this.tripId,
+    this.defaultCenter,
+  });
 
   @override
   State<MapTrackerWidget> createState() => _MapTrackerWidgetState();
@@ -27,6 +31,9 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
   Trip? _initialState;
   bool _arrivedNotified = false;
 
+  // Macuspana Fallback absoluto
+  static const LatLng _macuspanaDefault = LatLng(17.7600, -92.5950);
+
   @override
   void initState() {
     super.initState();
@@ -39,12 +46,19 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
   @override
   void dispose() {
     _subscription.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
   /// Conversión de Coordinates (dominio) a LatLng
   LatLng _toLatLng(Coordinates coords) {
     return LatLng(coords.latitude, coords.longitude);
+  }
+
+  /// Validación de coordenadas en Territorio Mexicano
+  bool _isWithinMexico(LatLng point) {
+    return point.latitude >= 14.0 && point.latitude <= 33.0 &&
+           point.longitude >= -118.0 && point.longitude <= -86.0;
   }
 
   Stream<Trip?> _getThrottledStream() {
@@ -67,14 +81,27 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
       builder: (context, snapshot) {
         final trip = snapshot.data;
         final List<LatLng> polyPoints = trip?.route.map(_toLatLng).toList() ?? [];
-        final lastPoint = polyPoints.isNotEmpty ? polyPoints.last : const LatLng(17.7600, -92.5950);
+        
+        // Determinamos el punto central inicial: 
+        // 1. Fin de ruta actual
+        // 2. Parámetro heredado del Home
+        // 3. Macuspana Default
+        LatLng lastPoint = _macuspanaDefault;
+        if (polyPoints.isNotEmpty) {
+          lastPoint = polyPoints.last;
+        } else if (widget.defaultCenter != null && _isWithinMexico(widget.defaultCenter!)) {
+          lastPoint = widget.defaultCenter!;
+        }
 
-        if (trip != null && polyPoints.isNotEmpty) {
+        // Solo movemos el mapa automáticamente si hay ruta y las coordenadas son mexicanas
+        if (trip != null && polyPoints.isNotEmpty && _isWithinMexico(lastPoint)) {
            WidgetsBinding.instance.addPostFrameCallback((_) {
-             _mapController.move(lastPoint, 15);
+             if (mounted) {
+               _mapController.move(lastPoint, 15);
+             }
            });
 
-           // Check for Arrival (Proximity Notification)
+           // Notificación de Arribo
            if (!_arrivedNotified && polyPoints.length >= 2) {
              final distance = _distanceCalculator.as(LengthUnit.Meter, polyPoints.first, lastPoint);
              if (distance < 200) {
@@ -115,7 +142,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
                     ),
                   MarkerLayer(
                     markers: [
-                      if (polyPoints.isNotEmpty)
+                      if (polyPoints.isNotEmpty && _isWithinMexico(lastPoint))
                         Marker(
                           point: lastPoint,
                           width: 40,
@@ -123,7 +150,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
                           rotate: true,
                           child: const Icon(Icons.drive_eta, color: Color(0xFFFF6B00), size: 30),
                         ),
-                      if (polyPoints.isNotEmpty)
+                      if (polyPoints.isNotEmpty && _isWithinMexico(polyPoints.first))
                          Marker(
                            point: polyPoints.first,
                            width: 40,
@@ -143,7 +170,7 @@ class _MapTrackerWidgetState extends State<MapTrackerWidget> {
                       const Icon(Icons.map_outlined, color: Color(0xFFFF6B00), size: 64),
                       const SizedBox(height: 16),
                       Text(
-                        "📍 Mapa listo - Ingresa tu destino",
+                        "📍 Buscando conductor en Macuspana",
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.8),
                           fontSize: 18,
