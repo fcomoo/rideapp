@@ -43,18 +43,24 @@ class _HomeDriverState extends State<HomeDriver> {
         rating: 4.9,
       ));
     }
+    
+    // Conectar al canal de solicitudes globales al entrar
+    AntigravityClient().connect('trips.requests');
   }
 
   void _listenToRequests() {
-    // Escuchar el canal global de solicitudes (canal: trips.requests)
+    // Escuchar solicitudes de viaje vía Antigravity
     Antigravity.on('trip.requested', (data) {
       if (!_isOnline) return;
-      
-      // El payload contiene { event, channel, payload: { trip: {...} } }
-      // Antigravity._emitLocal ya extrajo el 'payload' interno
-      final tripData = data['trip'] ?? data;
-      final trip = Trip.fromJson(tripData);
-      _showRequestBottomSheet(trip);
+      try {
+        // Antigravity._emitLocal ya extrajo el 'payload' interno
+        final tripData = data['trip'] ?? data;
+        final trip = Trip.fromJson(tripData);
+        if (!mounted) return;
+        _showRequestBottomSheet(trip);
+      } catch (e) {
+        print('Error parsing trip request: $e');
+      }
     });
 
     // Escuchar cambios en viajes completados para calificar
@@ -103,6 +109,10 @@ class _HomeDriverState extends State<HomeDriver> {
     DriverLocationService().stopTracking();
     _statusSub?.cancel();
     _mapController.dispose();
+    
+    // Al salir del panel de conductor, volver al canal de ubicaciones general
+    AntigravityClient().connect('drivers.locations');
+    
     super.dispose();
   }
 
