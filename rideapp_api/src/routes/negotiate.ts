@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { publishEvent } from '../redis/pub-sub';
 
 const prisma = new PrismaClient();
 
@@ -67,6 +68,19 @@ export async function negotiateRoutes(server: FastifyInstance) {
           status: 'counter',
         },
       });
+
+      // Emitir evento vía Redis para notificar al pasajero
+      await publishEvent(`trip.${tripId}`, 'negotiate.counter', {
+        id: offer.id,
+        tripId: offer.tripId,
+        driverId: offer.driverId,
+        counterPrice: offer.counterPrice,
+        offeredPrice: offer.offeredPrice,
+        status: offer.status,
+        driverName: 'Conductor', // En producción esto vendría del perfil del conductor
+        driverRating: 4.8,
+      });
+
       return reply.status(201).send({ offer });
     } catch (err: any) {
       console.error('[API] counterOffer Error:', err);
@@ -90,6 +104,14 @@ export async function negotiateRoutes(server: FastifyInstance) {
         where: { id: tripId },
         data: { driverId, status: 'accepted' },
       });
+
+      // Emitir evento vía Redis para notificar al conductor
+      await publishEvent(`trip.${tripId}`, 'negotiate.accepted', {
+        tripId,
+        driverId,
+        finalPrice,
+      });
+
       return reply.send({ success: true, finalPrice });
     } catch (err: any) {
       console.error('[API] acceptOffer Error:', err);

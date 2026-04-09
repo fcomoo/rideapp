@@ -147,7 +147,7 @@ class AntigravityClient {
         NotificationService().dispatchTripEvent(event, payload);
       } else if (event.contains('driver')) {
         GravityStore().updateDriver(Driver.fromJson(payload));
-      } else if (event.contains('negotiation')) {
+      } else if (event.contains('negotiate')) {
         GravityStore().updateOffer(NegotiationOffer.fromJson(payload));
       } else if (event.contains('.request')) {
         // Special case for Incoming Trip Requests to Driver

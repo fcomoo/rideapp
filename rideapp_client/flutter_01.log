@@ -1,0 +1,86 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d ZY22LJPM8X
+
+## exception
+
+SocketException: SocketException: Read failed (OS Error: Input/output error, errno = 5), port = 0
+
+```
+#0      _NativeSocket.read (dart:io-patch/socket_patch.dart:1346:33)
+#1      _RawSocket.read (dart:io-patch/socket_patch.dart:2371:26)
+#2      _Socket._onData (dart:io-patch/socket_patch.dart:2873:28)
+#3      _rootRunUnary (dart:async/zone_root.dart:56:13)
+#4      _CustomZone.runUnary (dart:async/zone.dart:733:19)
+#5      _CustomZone.runUnaryGuarded (dart:async/zone.dart:633:7)
+#6      _BufferingStreamSubscription._sendData (dart:async/stream_impl.dart:381:11)
+#7      _BufferingStreamSubscription._add (dart:async/stream_impl.dart:312:7)
+#8      _SyncStreamControllerDispatch._sendData (dart:async/stream_controller.dart:798:19)
+#9      _StreamController._add (dart:async/stream_controller.dart:663:7)
+#10     _StreamController.add (dart:async/stream_controller.dart:618:5)
+#11     new _RawSocket.<anonymous closure> (dart:io-patch/socket_patch.dart:2312:31)
+#12     _NativeSocket.issueReadEvent.issue (dart:io-patch/socket_patch.dart:1647:14)
+#13     _microtaskLoop (dart:async/schedule_microtask.dart:40:35)
+#14     _startMicrotaskLoop (dart:async/schedule_microtask.dart:49:5)
+#15     _runPendingImmediateCallback (dart:isolate-patch/isolate_patch.dart:127:13)
+#16     _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:194:5)
+```
+
+## flutter doctor
+
+```
+[✓] Flutter (Channel stable, 3.41.6, on macOS 26.3.1 25D2128 darwin-arm64, locale es-419) [1,469ms]
+    • Flutter version 3.41.6 on channel stable at /opt/homebrew/share/flutter
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision db50e20168 (hace 2 semanas), 2026-03-25 16:21:00 -0700
+    • Engine revision 425cfb54d0
+    • Dart version 3.11.4
+    • DevTools version 2.54.2
+    • Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop,
+      enable-android, enable-ios, cli-animations, enable-native-assets, omit-legacy-version-file,
+      enable-lldb-debugging, enable-uiscene-migration
+
+[!] Android toolchain - develop for Android devices (Android SDK version 36.0.0) [853ms]
+    • Android SDK at /Users/curk/Library/Android/sdk
+    • Emulator version 35.5.10.0 (build_id 13402964) (CL:N/A)
+    ✗ cmdline-tools component is missing.
+      Try installing or updating Android Studio.
+      Alternatively, download the tools from
+      https://developer.android.com/studio#command-line-tools-only and make sure to set the
+      ANDROID_HOME environment variable.
+      See https://developer.android.com/studio/command-line for more details.
+    ✗ Android license status unknown.
+      Run `flutter doctor --android-licenses` to accept the SDK licenses.
+      See https://flutter.dev/to/macos-android-setup for more details.
+
+[✓] Xcode - develop for iOS and macOS (Xcode 26.4) [1,066ms]
+    • Xcode at /Applications/Xcode.app/Contents/Developer
+    • Build 17E192
+    • CocoaPods version 1.16.2
+
+[✓] Chrome - develop for the web [2ms]
+    • Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+
+[✓] Connected device (5 available) [6.7s]
+    • motorola edge 60 pro (mobile) • ZY22LJPM8X                           • android-arm64  •
+      Android 16 (API 36)
+    • iPhone de Curk (mobile)       • 00008140-001214E90C32801C            • ios            • iOS
+      26.4 23E246
+    • iPhone 16e (mobile)           • 136D792E-D009-426E-8CCA-AB10D5A36E1C • ios            •
+      com.apple.CoreSimulator.SimRuntime.iOS-26-2 (simulator)
+    • macOS (desktop)               • macos                                • darwin-arm64   • macOS
+      26.3.1 25D2128 darwin-arm64
+    • Chrome (web)                  • chrome                               • web-javascript • Google
+      Chrome 146.0.7680.178
+    ! Error: Browsing on the local area network for iPad de Francisco. Ensure the device is unlocked
+      and attached with a cable or associated with the same local area network as this Mac.
+      The device must be opted into Developer Mode to connect wirelessly. (code -27)
+
+[✓] Network resources [510ms]
+    • All expected network resources are available.
+
+! Doctor found issues in 1 category.
+```

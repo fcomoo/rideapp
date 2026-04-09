@@ -35,6 +35,8 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
   @override
   void initState() {
     super.initState();
+    // Conectar al canal del trip para recibir contraofertas en tiempo real
+    AntigravityClient().connect('trip.${widget.tripId}');
     _listenToOffers();
   }
 

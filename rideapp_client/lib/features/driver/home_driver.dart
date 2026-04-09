@@ -53,16 +53,23 @@ class _HomeDriverState extends State<HomeDriver> {
     Antigravity.on('trip.requested', (data) {
       if (!_isOnline) return;
       try {
-        // El eventController local de Antigravity entrega { 'event': ..., 'payload': ... }
         final tripData = data['payload'] ?? data;
         print('Driver received trip request: $tripData');
         
-        // Si el payload viene envuelto en una llave 'trip' dentro del payload de red
-        final finalData = (tripData is Map && tripData.containsKey('trip')) ? tripData['trip'] : tripData;
+        // El payload de la red es mínimo, construimos el Trip manualmente
+        final trip = Trip(
+          id: (tripData['tripId'] ?? tripData['id'] ?? 'trip-unknown').toString(),
+          clientId: (tripData['clientId'] ?? 'client-unknown').toString(),
+          driverId: null,
+          status: TripStatus.requested,
+          route: [],
+        );
         
-        final trip = Trip.fromJson(finalData);
+        // Extraer el precio ofrecido
+        final offeredPrice = (tripData['offeredPrice'] as num?)?.toDouble() ?? 25.0;
+
         if (!mounted) return;
-        _showRequestBottomSheet(trip);
+        _showRequestBottomSheet(trip, offeredPrice);
       } catch (e) {
         print('Error parsing trip request: $e');
         print('Raw data received: $data');
@@ -82,7 +89,7 @@ class _HomeDriverState extends State<HomeDriver> {
     });
   }
 
-  void _showRequestBottomSheet(Trip trip) {
+  void _showRequestBottomSheet(Trip trip, double offeredPrice) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -90,7 +97,7 @@ class _HomeDriverState extends State<HomeDriver> {
       builder: (context) => DriverOfferScreen(
         trip: trip, 
         driverId: widget.driverId,
-        suggestedPrice: (trip as dynamic).offeredPrice ?? 35.0,
+        suggestedPrice: offeredPrice,
       ),
     );
   }
