@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:rideapp_client/core/antigravity/gravity_store.dart';
 import 'package:rideapp_client/core/antigravity/profile.dart';
+import 'package:rideapp_client/core/antigravity/client.dart';
 import 'package:rideapp_client/core/protocols/negotiation_protocol.dart';
 import 'package:rideapp_client/domain/entities/negotiation_offer.dart';
 

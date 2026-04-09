@@ -33,7 +33,12 @@ class Antigravity {
   static void emit(String event, Map<String, dynamic> data) {
     print('Antigravity EMITTING: $event on ${data['tripId'] ?? data['driverId']}');
     
-    final channel = data['tripId'] != null ? 'trip.${data['tripId']}' : 'driver.${data['driverId']}';
+    String channel = data['tripId'] != null ? 'trip.${data['tripId']}' : 'driver.${data['driverId']}';
+    
+    // Exception for global trip requests
+    if (event == 'trip.requested') {
+      channel = 'trips.requests';
+    }
     
     AntigravityClient().send(event, channel, data);
   }
@@ -119,8 +124,8 @@ class AntigravityClient {
   void _handleIncomingMessage(dynamic rawMessage) {
     try {
       final Map<String, dynamic> data = jsonDecode(rawMessage as String);
-      final String event = data['event'];
-      final Map<String, dynamic> payload = data['payload'];
+      final String event = data['event'] as String? ?? '';
+      final Map<String, dynamic> payload = (data['payload'] as Map<String, dynamic>?) ?? {};
 
       // Propagate to local listeners
       Antigravity._emitLocal(event, payload);
