@@ -26,6 +26,8 @@ class HomeDriver extends StatefulWidget {
 class _HomeDriverState extends State<HomeDriver> {
   final MapController _mapController = MapController();
   bool _isOnline = false;
+  bool _tripAccepted = false;
+  String? _activeTripId;
   StreamSubscription? _statusSub;
   LatLng _lastKnownCenter = AppConfig.macuspanaCenter;
 
@@ -86,6 +88,22 @@ class _HomeDriverState extends State<HomeDriver> {
       if (completedTrip != null) {
         _showRatingScreen(completedTrip);
       }
+    });
+
+    // Escuchar cuando una negociación es aceptada por el pasajero
+    Antigravity.on('negotiate.accepted', (data) {
+      if (!_isOnline) return;
+      final payload = data['payload'] ?? data;
+      final driverId = payload['driverId'] as String? ?? '';
+      if (driverId != widget.driverId) return;
+      
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _tripAccepted = true;
+          _activeTripId = payload['tripId'] as String?;
+        });
+      });
     });
   }
 
@@ -302,61 +320,106 @@ class _HomeDriverState extends State<HomeDriver> {
 
   Widget _buildBottomOverlay() {
     return Positioned(
-      bottom: 40, left: 20, right: 20,
+      bottom: 40, 
+      left: 20, 
+      right: 20,
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1C),
+          color: _tripAccepted ? const Color(0xFF1B5E20) : const Color(0xFF1C1C1C),
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 20, offset: Offset(0, 10))],
           border: Border.all(color: Colors.white10),
         ),
-        child: Column(
+        child: _tripAccepted ? _buildAcceptedPanel() : _buildIdlePanel(),
+      ),
+    );
+  }
+
+  Widget _buildAcceptedPanel() {
+    return Column(
+      children: [
+        const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                Icon(
-                  _isOnline ? Icons.radar : Icons.power_settings_new,
-                  color: _isOnline ? const Color(0xFFFF6B00) : Colors.white24,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _isOnline ? 'ESPERANDO SOLICITUDES...' : 'MODO DESCONECTADO',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _isOnline ? 'Buscando pasajeros en Macuspana' : 'Activa el switch para recibir viajes',
-                        style: const TextStyle(color: Colors.white38, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_isOnline)
-                  const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6B00))),
-              ],
-            ),
-            if (_isOnline) ...[
-              const Divider(color: Colors.white10, height: 32),
-              StreamBuilder<Position>(
-                stream: Geolocator.getPositionStream(),
-                builder: (context, snapshot) {
-                  final lat = snapshot.data?.latitude.toStringAsFixed(6) ?? '--';
-                  final lng = snapshot.data?.longitude.toStringAsFixed(6) ?? '--';
-                  return Text(
-                    'GPS: $lat, $lng',
-                    style: const TextStyle(color: Colors.white24, fontSize: 10, fontFamily: 'monospace'),
-                  );
-                },
+            Icon(Icons.check_circle, color: Colors.white, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'VIAJE ACEPTADO - EN CAMINO AL PASAJERO',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
               ),
-            ],
+            ),
           ],
         ),
-      ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _tripAccepted = false;
+                _activeTripId = null;
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF1B5E20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+            child: const Text('COMPLETAR VIAJE', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIdlePanel() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(
+              _isOnline ? Icons.radar : Icons.power_settings_new,
+              color: _isOnline ? const Color(0xFFFF6B00) : Colors.white24,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _isOnline ? 'ESPERANDO SOLICITUDES...' : 'MODO DESCONECTADO',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _isOnline ? 'Buscando pasajeros en Macuspana' : 'Activa el switch para recibir viajes',
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (_isOnline)
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6B00))),
+          ],
+        ),
+        if (_isOnline) ...[
+          const Divider(color: Colors.white10, height: 32),
+          StreamBuilder<Position>(
+            stream: Geolocator.getPositionStream(),
+            builder: (context, snapshot) {
+              final lat = snapshot.data?.latitude.toStringAsFixed(6) ?? '--';
+              final lng = snapshot.data?.longitude.toStringAsFixed(6) ?? '--';
+              return Text(
+                'GPS: $lat, $lng',
+                style: const TextStyle(color: Colors.white24, fontSize: 10, fontFamily: 'monospace'),
+              );
+            },
+          ),
+        ],
+      ],
     );
   }
 }
