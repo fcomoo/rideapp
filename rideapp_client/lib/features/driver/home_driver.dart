@@ -346,7 +346,7 @@ class _HomeDriverState extends State<HomeDriver> {
             SizedBox(width: 12),
             Expanded(
               child: Text(
-                'VIAJE ACEPTADO - EN CAMINO AL PASAJERO',
+                '✅ VIAJE ACEPTADO - DIRÍGETE AL PASAJERO',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ),
@@ -358,6 +358,15 @@ class _HomeDriverState extends State<HomeDriver> {
           height: 50,
           child: ElevatedButton(
             onPressed: () {
+              // Emitir evento de completado antes de limpiar estado local
+              if (_activeTripId != null) {
+                Antigravity.emit('trip.completed', {
+                  'tripId': _activeTripId,
+                  'driverId': widget.driverId,
+                  'status': 'completed',
+                });
+              }
+
               setState(() {
                 _tripAccepted = false;
                 _activeTripId = null;

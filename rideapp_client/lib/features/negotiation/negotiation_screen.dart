@@ -248,6 +248,8 @@ class _NegotiationScreenState extends State<NegotiationScreen> {
       clientId: widget.clientId,
       finalPrice: offer.counterPrice ?? offer.offeredPrice,
     );
-    Navigator.pop(context); // Finaliza negociación
+    
+    // Regresa al HomePassenger directamente, el cual ya maneja el estado de viaje activo
+    Navigator.popUntil(context, (route) => route.isFirst);
   }
 }
